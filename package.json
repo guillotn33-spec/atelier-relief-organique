@@ -1,0 +1,15 @@
+{
+  "name": "atelier-relief-organique",
+  "version": "2.0.0-lot1",
+  "private": true,
+  "type": "module",
+  "description": "Atelier de sculpture de relief organique — iPad / Safari / Apple Pencil",
+  "scripts": {
+    "dev": "node build.mjs --serve",
+    "build": "node build.mjs",
+    "test": "node --test tests/"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

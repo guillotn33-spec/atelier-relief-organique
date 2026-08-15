@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#171715">
+  <title>Atelier de relief organique</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <!-- Écran de création (§2) — précède l'atelier tant qu'aucun projet n'est ouvert. -->
+  <section class="creation" id="creation" hidden aria-label="Nouveau projet">
+    <div class="creation-card">
+      <div>
+        <h2>Nouveau panneau</h2>
+        <p class="creation-lead">Choisissez la forme, puis saisissez les dimensions réelles du panneau en centimètres.</p>
+      </div>
+
+      <div class="shape-choice" role="radiogroup" aria-label="Forme de la toile">
+        <button class="shape-option active" type="button" data-shape="rectangle" role="radio" aria-checked="true">
+          <span class="shape-glyph" aria-hidden="true"></span>Rectangle
+        </button>
+        <button class="shape-option" type="button" data-shape="square" role="radio" aria-checked="false">
+          <span class="shape-glyph" aria-hidden="true"></span>Carré
+        </button>
+        <button class="shape-option" type="button" data-shape="circle" role="radio" aria-checked="false">
+          <span class="shape-glyph" aria-hidden="true"></span>Rond
+        </button>
+      </div>
+
+      <div class="dim-grid" id="dimGrid"></div>
+
+      <div class="creation-actions">
+        <button class="btn btn-primary" id="createProject" type="button">Ouvrir l’atelier</button>
+      </div>
+
+      <div class="creation-projects" id="creationProjects" hidden>
+        <h3>Projets enregistrés</h3>
+        <div id="projectList"></div>
+      </div>
+    </div>
+  </section>
+
+  <main class="app" id="atelier" hidden>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">≈</div>
+        <div>
+          <p class="eyebrow">Relief lab</p>
+          <h1>Atelier de relief organique</h1>
+        </div>
+      </div>
+      <div class="top-actions">
+        <button class="btn drawer-toggle" id="drawerToggle" type="button" aria-expanded="false" aria-controls="sidebar"><span class="btn-icon" aria-hidden="true">☰</span> Réglages</button>
+        <button class="btn" id="newProject" type="button"><span class="btn-icon" aria-hidden="true">✚</span> Nouveau</button>
+        <button class="btn" id="randomizeTop" type="button"><span class="btn-icon" aria-hidden="true">↻</span> Nouvelle forme</button>
+        <button class="btn btn-primary" id="exportTop" type="button"><span class="btn-icon" aria-hidden="true">↓</span> <span class="btn-label">Exporter en PNG</span></button>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <div class="backdrop" id="backdrop" aria-hidden="true"></div>
+      <aside class="sidebar" id="sidebar" aria-label="Réglages du relief">
+        <div class="sidebar-intro">
+          <p>Choisissez une composition, puis ajustez sa matière, ses creux et sa lumière. Chaque rendu est calculé localement.</p>
+        </div>
+
+        <div class="presets" aria-label="Préréglages">
+          <button class="preset active" type="button" data-preset="dunes">Dunes</button>
+          <button class="preset" type="button" data-preset="cellules">Cellules</button>
+          <button class="preset" type="button" data-preset="archipel">Archipel</button>
+        </div>
+
+        <div class="mobile-actions">
+          <button class="btn" id="randomizeMobile" type="button">↻ Nouvelle forme</button>
+          <button class="btn btn-primary" id="exportMobile" type="button">↓ Exporter</button>
+        </div>
+
+        <details open>
+          <summary>Panneau</summary>
+          <div class="control-list">
+            <label class="control">
+              <span class="control-head"><span id="widthLabel">Largeur</span><output class="control-value" id="widthCmValue"></output></span>
+              <input type="range" id="widthCm" min="1" max="500" step="1" value="160">
+            </label>
+            <label class="control" id="heightControl">
+              <span class="control-head"><span>Hauteur</span><output class="control-value" id="heightCmValue"></output></span>
+              <input type="range" id="heightCm" min="1" max="200" step="1" value="100">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Profondeur</span><output class="control-value" id="depthCmValue"></output></span>
+              <input type="range" id="depthCm" min="0.1" max="30" step="0.1" value="6">
+            </label>
+          </div>
+        </details>
+
+        <details open>
+          <summary>Composition</summary>
+          <div class="control-list">
+            <label class="control">
+              <span class="control-head"><span>Nombre de cavités</span><output class="control-value" id="countValue"></output></span>
+              <input type="range" id="count" min="4" max="20" step="1" value="9">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Taille des formes</span><output class="control-value" id="scaleValue"></output></span>
+              <input type="range" id="scale" min="55" max="150" step="1" value="140">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Allongement</span><output class="control-value" id="elongationValue"></output></span>
+              <input type="range" id="elongation" min="0" max="100" step="1" value="65">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Mouvement du dessin</span><output class="control-value" id="flowValue"></output></span>
+              <input type="range" id="flow" min="0" max="100" step="1" value="70">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Irrégularité</span><output class="control-value" id="irregularityValue"></output></span>
+              <input type="range" id="irregularity" min="0" max="100" step="1" value="35">
+            </label>
+          </div>
+        </details>
+
+        <details open>
+          <summary>Relief &amp; matière</summary>
+          <div class="control-list">
+            <label class="control">
+              <span class="control-head"><span>Profondeur du relief</span><output class="control-value" id="depthValue"></output></span>
+              <input type="range" id="depth" min="20" max="100" step="1" value="92">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Douceur des arêtes</span><output class="control-value" id="softnessValue"></output></span>
+              <input type="range" id="softness" min="5" max="100" step="1" value="62">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Ondulation</span><output class="control-value" id="waveValue"></output></span>
+              <input type="range" id="wave" min="0" max="100" step="1" value="60">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Grain de surface</span><output class="control-value" id="textureValue"></output></span>
+              <input type="range" id="texture" min="0" max="100" step="1" value="30">
+            </label>
+            <label class="color-row" for="materialColor">
+              <span>Couleur de matière</span>
+              <input type="color" id="materialColor" value="#e8e4dc">
+            </label>
+          </div>
+        </details>
+
+        <details open>
+          <summary>Sculpture</summary>
+          <div class="control-list">
+            <label class="switch-row" for="animate">
+              <span>Animer l’ondulation</span>
+              <span class="switch"><input type="checkbox" id="animate"><span aria-hidden="true"></span></span>
+            </label>
+            <button class="btn" id="clearSculpt" type="button"><span class="btn-icon" aria-hidden="true">⌫</span> Effacer la sculpture</button>
+          </div>
+        </details>
+
+        <details>
+          <summary>Lumière &amp; présentation</summary>
+          <div class="control-list">
+            <label class="control">
+              <span class="control-head"><span>Direction</span><output class="control-value" id="lightAngleValue"></output></span>
+              <input type="range" id="lightAngle" min="0" max="359" step="1" value="245">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Hauteur de la lumière</span><output class="control-value" id="lightHeightValue"></output></span>
+              <input type="range" id="lightHeight" min="15" max="80" step="1" value="42">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Contraste</span><output class="control-value" id="contrastValue"></output></span>
+              <input type="range" id="contrast" min="20" max="100" step="1" value="80">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Halo arrière</span><output class="control-value" id="backlightValue"></output></span>
+              <input type="range" id="backlight" min="0" max="100" step="1" value="58">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Découpe du panneau</span></span>
+              <select class="select" id="panelLayout">
+                <option value="none">Panneau monobloc</option>
+                <option value="2x1">2 panneaux verticaux</option>
+                <option value="2x2">4 panneaux (2 × 2)</option>
+                <option value="3x2">6 panneaux (3 × 2)</option>
+              </select>
+            </label>
+            <label class="switch-row" for="frame">
+              <span>Cadre noir</span>
+              <span class="switch"><input type="checkbox" id="frame" checked><span aria-hidden="true"></span></span>
+            </label>
+            <label class="color-row" for="wallColor">
+              <span>Couleur du mur</span>
+              <input type="color" id="wallColor" value="#d8d3c9">
+            </label>
+          </div>
+        </details>
+      </aside>
+
+      <section class="stage-shell" aria-label="Aperçu du relief">
+        <div class="stage" id="stage">
+          <div class="rendering" id="rendering">Calcul du relief…</div>
+          <div class="art-wrap" id="artWrap" data-shape="rectangle">
+            <canvas id="reliefCanvas" role="img" aria-label="Aperçu d’un panneau mural abstrait en relief organique"></canvas>
+          </div>
+          <div class="toolbar" id="toolbar" role="toolbar" aria-label="Outils de sculpture">
+            <button class="tool active" type="button" data-tool="light"><span class="tool-icon" aria-hidden="true">☀</span>Lumière</button>
+            <button class="tool" type="button" data-tool="warp"><span class="tool-icon" aria-hidden="true">〰</span>Onduler</button>
+            <button class="tool" type="button" data-tool="dig"><span class="tool-icon" aria-hidden="true">◡</span>Creuser</button>
+            <button class="tool" type="button" data-tool="raise"><span class="tool-icon" aria-hidden="true">◠</span>Bomber</button>
+            <button class="tool" type="button" data-tool="smooth"><span class="tool-icon" aria-hidden="true">≋</span>Lisser</button>
+            <button class="tool" type="button" data-tool="erase"><span class="tool-icon" aria-hidden="true">⌫</span>Gomme</button>
+            <span class="tool-sep" aria-hidden="true"></span>
+            <button class="tool" type="button" id="undoBtn" disabled><span class="tool-icon" aria-hidden="true">↶</span>Annuler</button>
+            <button class="tool" type="button" id="redoBtn" disabled><span class="tool-icon" aria-hidden="true">↷</span>Rétablir</button>
+            <span class="tool-sep" aria-hidden="true"></span>
+            <label class="tool-slider">Taille <output class="tool-slider-value" id="brushSizeValue"></output><input type="range" id="brushSize" min="2" max="80" step="1" value="19"></label>
+            <label class="tool-slider">Force <output class="tool-slider-value" id="brushStrengthValue"></output><input type="range" id="brushStrength" min="10" max="100" step="1" value="55"></label>
+          </div>
+        </div>
+        <footer class="stage-footer">
+          <div><strong id="designName">Dunes</strong> · graine <span id="seedLabel">2749</span> · <span id="sizeLabel">160 × 100 cm</span></div>
+          <div class="hint"><span class="hint-symbol" id="hintSymbol" aria-hidden="true">☀</span> <span id="hintText">Glissez sur l’œuvre pour déplacer la lumière</span></div>
+        </footer>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
