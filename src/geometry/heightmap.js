@@ -14,17 +14,19 @@
 //     centimètres sur l'axe Z est faite au seul point qui en a besoin, la
 //     construction du mesh (lot 5).
 
-import { blurFraction, evalField, makeFieldContext } from './legacyField.js';
+import { blurFraction, evalField as evalLegacyField, makeFieldContext as makeLegacyContext } from './legacyField.js';
+import { evalField as evalOrganicField, makeFieldContext as makeOrganicContext } from './field.js';
 
 const LONG_TARGET = 640; // échantillons sur le grand côté
 const MIN_SHORT = 40; // plancher sur le petit côté (panneaux très allongés)
 const MAX_CELLS = 700000; // plafond mémoire : ~2,8 Mo par Float32Array
+const MAX_BLUR_CELLS = 32; // plafond de coût du flou (voir blurRadiusCells)
 
-export function gridFor(widthCm, heightCm) {
+export function gridFor(widthCm, heightCm, quality = 1) {
   const long = Math.max(widthCm, heightCm);
   const short = Math.min(widthCm, heightCm);
-  let cellCm = long / LONG_TARGET;
-  if (short / cellCm < MIN_SHORT) cellCm = short / MIN_SHORT;
+  let cellCm = long / (LONG_TARGET * quality);
+  if (short / cellCm < MIN_SHORT * quality) cellCm = short / (MIN_SHORT * quality);
 
   let cols = Math.ceil(widthCm / cellCm) + 1;
   let rows = Math.ceil(heightCm / cellCm) + 1;
@@ -113,17 +115,46 @@ function blurTile(src, dst, tileW, tileH, radius) {
   return kernelRadius;
 }
 
-function blurRadiusCells(project, grid) {
-  return blurFraction(project.geometry) * (project.widthCm / grid.cellCm);
+export function isLegacyEngine(project) {
+  return project.geometry.engine === 'legacy-v1';
+}
+
+/**
+ * Rayon d'adoucissement, en CELLULES.
+ *
+ * Pour `organic-v2`, la douceur est une longueur PHYSIQUE en centimètres. C'est
+ * la seule définition compatible avec un champ ancré en cm : si le flou restait
+ * une fraction de la largeur de la toile, élargir le panneau adoucirait le
+ * relief déjà en place, et « agrandir ne déplace rien » serait faux.
+ *
+ * Le rayon est plafonné : sur un très petit panneau, la cellule est minuscule et
+ * un flou de plusieurs centimètres coûterait un noyau de plusieurs centaines de
+ * taps. Au-delà du plafond, l'adoucissement physique sature — c'est assumé.
+ */
+export function blurRadiusCells(project, grid) {
+  if (isLegacyEngine(project)) {
+    return blurFraction(project.geometry) * (project.widthCm / grid.cellCm);
+  }
+  const blurCm = 0.3 + project.geometry.softness * 4.0;
+  return Math.min(MAX_BLUR_CELLS, blurCm / grid.cellCm);
+}
+
+function makeContextFor(project) {
+  return isLegacyEngine(project)
+    ? makeLegacyContext(project.geometry, project.widthCm / project.heightCm)
+    : makeOrganicContext(project.geometry);
 }
 
 /** Évalue le champ brut sur un rectangle de cellules [c0,c1[ × [r0,r1[. */
-function fillRaw(target, targetCols, hm, project, layer, ctx, c0, r0, c1, r1, tPhase, withSwell) {
+function fillRaw(target, targetCols, hm, project, layer, ctx, c0, r0, c1, r1, options) {
+  const useSculpt = !!layer && layer.active;
+  const legacy = isLegacyEngine(project);
   const invW = 1 / project.widthCm;
   const invH = 1 / project.heightCm;
   const halfW = project.widthCm / 2;
   const halfH = project.heightCm / 2;
-  const useSculpt = !!layer && layer.active;
+  const tPhase = options.tPhase || 0;
+  const withSwell = options.withSwell !== false;
 
   for (let r = r0; r < r1; r++) {
     const yCm = hm.yCmAt(r);
@@ -131,18 +162,22 @@ function fillRaw(target, targetCols, hm, project, layer, ctx, c0, r0, c1, r1, tP
     const out = (r - r0) * targetCols - c0;
     for (let c = c0; c < c1; c++) {
       const xCm = hm.xCmAt(c);
-      const u = (xCm + halfW) * invW;
-      let warpU = 0;
-      let warpV = 0;
+      let warpXCm = 0;
+      let warpYCm = 0;
       let lift = 0;
       if (useSculpt) {
-        // Le calque est en cm ; le champ raisonne en u/v. La conversion se fait ici,
-        // axe par axe, et nulle part ailleurs.
-        warpU = layer.sample(layer.warpX, xCm, yCm) * invW;
-        warpV = layer.sample(layer.warpY, xCm, yCm) * invH;
+        warpXCm = layer.sample(layer.warpX, xCm, yCm);
+        warpYCm = layer.sample(layer.warpY, xCm, yCm);
         lift = layer.sample(layer.height, xCm, yCm);
       }
-      target[out + c] = evalField(ctx, u, v, warpU, warpV, lift, tPhase, withSwell);
+      if (legacy) {
+        // Le moteur v1 raisonne en u/v ; la conversion se fait ici, et nulle part ailleurs.
+        const u = (xCm + halfW) * invW;
+        target[out + c] = evalLegacyField(ctx, u, v, warpXCm * invW, warpYCm * invH, lift, tPhase, withSwell);
+      } else {
+        // Le moteur v2 raisonne directement en centimètres absolus.
+        target[out + c] = evalOrganicField(ctx, xCm, yCm, warpXCm, warpYCm, lift);
+      }
     }
   }
 }
@@ -163,14 +198,21 @@ function recomputeStats(hm) {
   hm.max = max;
 }
 
-/** Construction complète. Retourne une Heightmap prête à consommer. */
-export function buildHeightmap(project, layer, { tPhase = 0, withSwell = true } = {}) {
-  const grid = gridFor(project.widthCm, project.heightCm);
+/**
+ * Construction complète. Retourne une Heightmap prête à consommer.
+ * `quality < 1` échantillonne le MÊME champ sur une grille plus grossière — le
+ * relief est identique, seule sa finesse d'échantillonnage baisse (animation).
+ * `carrierPhase` fait défiler la houle porteuse (moteur v2 uniquement).
+ */
+export function buildHeightmap(project, layer, options = {}) {
+  const { quality = 1, carrierPhase = 0 } = options;
+  const grid = gridFor(project.widthCm, project.heightCm, quality);
   const hm = new Heightmap(grid);
-  hm.ctx = makeFieldContext(project.geometry, project.widthCm / project.heightCm);
+  hm.ctx = makeContextFor(project);
+  if (!isLegacyEngine(project)) hm.ctx.carrierPhase = carrierPhase;
   hm.blurRadius = blurRadiusCells(project, grid);
 
-  fillRaw(hm.raw, hm.cols, hm, project, layer, hm.ctx, 0, 0, hm.cols, hm.rows, tPhase, withSwell);
+  fillRaw(hm.raw, hm.cols, hm, project, layer, hm.ctx, 0, 0, hm.cols, hm.rows, options);
   blurTile(hm.raw, hm.h, hm.cols, hm.rows, hm.blurRadius);
   recomputeStats(hm);
   return hm;
@@ -180,7 +222,7 @@ export function buildHeightmap(project, layer, { tPhase = 0, withSwell = true } 
  * Met à jour la heightmap sur un rectangle en cm (trait de sculpture en cours).
  * Retourne le rectangle de cellules réellement réécrit, ou null.
  */
-export function updateHeightmapRect(hm, project, layer, rectCm, { tPhase = 0, withSwell = true } = {}) {
+export function updateHeightmapRect(hm, project, layer, rectCm, options = {}) {
   const K = Math.max(1, Math.round(hm.blurRadius)) + 1;
   const c0 = Math.max(0, Math.floor(hm.colAt(rectCm.x0)));
   const r0 = Math.max(0, Math.floor(hm.rowAt(rectCm.y0)));
@@ -197,7 +239,7 @@ export function updateHeightmapRect(hm, project, layer, rectCm, { tPhase = 0, wi
 
   const rawTile = new Float32Array(tileW * tileH);
   const blurTileBuf = new Float32Array(tileW * tileH);
-  fillRaw(rawTile, tileW, hm, project, layer, hm.ctx, ec0, er0, ec1, er1, tPhase, withSwell);
+  fillRaw(rawTile, tileW, hm, project, layer, hm.ctx, ec0, er0, ec1, er1, options);
   blurTile(rawTile, blurTileBuf, tileW, tileH, hm.blurRadius);
 
   // Seule la zone intérieure est exacte : le flou de la tuile y a vu tous ses voisins.

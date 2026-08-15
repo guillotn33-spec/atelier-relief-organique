@@ -53,7 +53,7 @@
       <div class="top-actions">
         <button class="btn drawer-toggle" id="drawerToggle" type="button" aria-expanded="false" aria-controls="sidebar"><span class="btn-icon" aria-hidden="true">☰</span> Réglages</button>
         <button class="btn" id="newProject" type="button"><span class="btn-icon" aria-hidden="true">✚</span> Nouveau</button>
-        <button class="btn" id="randomizeTop" type="button"><span class="btn-icon" aria-hidden="true">↻</span> Nouvelle forme</button>
+        <button class="btn" id="variationTop" type="button"><span class="btn-icon" aria-hidden="true">↻</span> Nouvelle variation</button>
         <button class="btn btn-primary" id="exportTop" type="button"><span class="btn-icon" aria-hidden="true">↓</span> <span class="btn-label">Exporter en PNG</span></button>
       </div>
     </header>
@@ -72,8 +72,16 @@
         </div>
 
         <div class="mobile-actions">
-          <button class="btn" id="randomizeMobile" type="button">↻ Nouvelle forme</button>
+          <button class="btn" id="variationMobile" type="button">↻ Variation</button>
           <button class="btn btn-primary" id="exportMobile" type="button">↓ Exporter</button>
+        </div>
+
+        <div class="variation-actions" aria-label="Génération">
+          <button class="btn" id="newVariation" type="button"><span class="btn-icon" aria-hidden="true">↻</span> Nouvelle variation</button>
+          <div class="variation-pair">
+            <button class="btn" id="setBase" type="button">Définir comme base</button>
+            <button class="btn" id="restoreBase" type="button" disabled>Retour base</button>
+          </div>
         </div>
 
         <details open>
@@ -98,20 +106,28 @@
           <summary>Composition</summary>
           <div class="control-list">
             <label class="control">
-              <span class="control-head"><span>Nombre de cavités</span><output class="control-value" id="countValue"></output></span>
-              <input type="range" id="count" min="4" max="20" step="1" value="9">
+              <span class="control-head"><span>Taille des cavités</span><output class="control-value" id="basinScaleCmValue"></output></span>
+              <input type="range" id="basinScaleCm" min="8" max="160" step="1" value="52">
             </label>
             <label class="control">
-              <span class="control-head"><span>Taille des formes</span><output class="control-value" id="scaleValue"></output></span>
-              <input type="range" id="scale" min="55" max="150" step="1" value="140">
+              <span class="control-head"><span>Densité</span><output class="control-value" id="densityValue"></output></span>
+              <input type="range" id="density" min="5" max="95" step="1" value="48">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Chenaux</span><output class="control-value" id="channelWeightValue"></output></span>
+              <input type="range" id="channelWeight" min="0" max="100" step="1" value="55">
             </label>
             <label class="control">
               <span class="control-head"><span>Allongement</span><output class="control-value" id="elongationValue"></output></span>
-              <input type="range" id="elongation" min="0" max="100" step="1" value="65">
+              <input type="range" id="elongation" min="0" max="100" step="1" value="55">
             </label>
             <label class="control">
-              <span class="control-head"><span>Mouvement du dessin</span><output class="control-value" id="flowValue"></output></span>
-              <input type="range" id="flow" min="0" max="100" step="1" value="70">
+              <span class="control-head"><span>Orientation</span><output class="control-value" id="orientationDegValue"></output></span>
+              <input type="range" id="orientationDeg" min="0" max="180" step="1" value="22">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Mouvement du dessin</span><output class="control-value" id="warpAmountValue"></output></span>
+              <input type="range" id="warpAmount" min="0" max="100" step="1" value="62">
             </label>
             <label class="control">
               <span class="control-head"><span>Irrégularité</span><output class="control-value" id="irregularityValue"></output></span>
@@ -123,17 +139,25 @@
         <details open>
           <summary>Relief &amp; matière</summary>
           <div class="control-list">
+            <label class="switch-row" for="negative">
+              <span>Négatif</span>
+              <span class="switch"><input type="checkbox" id="negative"><span aria-hidden="true"></span></span>
+            </label>
             <label class="control">
               <span class="control-head"><span>Profondeur du relief</span><output class="control-value" id="depthValue"></output></span>
               <input type="range" id="depth" min="20" max="100" step="1" value="92">
             </label>
             <label class="control">
+              <span class="control-head"><span>Épaulement des bords</span><output class="control-value" id="shoulderValue"></output></span>
+              <input type="range" id="shoulder" min="5" max="100" step="1" value="50">
+            </label>
+            <label class="control">
               <span class="control-head"><span>Douceur des arêtes</span><output class="control-value" id="softnessValue"></output></span>
-              <input type="range" id="softness" min="5" max="100" step="1" value="62">
+              <input type="range" id="softness" min="5" max="100" step="1" value="55">
             </label>
             <label class="control">
               <span class="control-head"><span>Ondulation</span><output class="control-value" id="waveValue"></output></span>
-              <input type="range" id="wave" min="0" max="100" step="1" value="60">
+              <input type="range" id="wave" min="0" max="100" step="1" value="50">
             </label>
             <label class="control">
               <span class="control-head"><span>Grain de surface</span><output class="control-value" id="textureValue"></output></span>

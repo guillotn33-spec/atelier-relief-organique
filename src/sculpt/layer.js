@@ -155,7 +155,12 @@ export class SculptLayer {
     this.active = snap.active;
   }
 
-  /** Forme sérialisable — IndexedDB stocke les tableaux typés nativement. */
+  /**
+   * Forme sérialisable — IndexedDB stocke les tableaux typés nativement.
+   * Les tableaux sont COPIÉS : le résultat sert aussi d'instantané de base (§4),
+   * et rendre les tableaux vivants ferait qu'une sculpture ultérieure modifierait
+   * l'instantané censé la précéder.
+   */
   serialize() {
     return {
       cellCm: this.cellCm,
@@ -165,10 +170,28 @@ export class SculptLayer {
       rows: this.rows,
       warpLimitCm: this.warpLimitCm,
       active: this.active,
-      warpX: this.warpX,
-      warpY: this.warpY,
-      height: this.height,
+      warpX: this.warpX.slice(),
+      warpY: this.warpY.slice(),
+      height: this.height.slice(),
     };
+  }
+
+  /** Reprend l'état exact d'une forme sérialisée, géométrie de grille comprise. */
+  adopt(data) {
+    if (!data) {
+      this.clear();
+      return;
+    }
+    this.cellCm = data.cellCm;
+    this.originXCm = data.originXCm;
+    this.originYCm = data.originYCm;
+    this.cols = data.cols;
+    this.rows = data.rows;
+    this.warpLimitCm = data.warpLimitCm;
+    this.warpX = new Float32Array(data.warpX);
+    this.warpY = new Float32Array(data.warpY);
+    this.height = new Float32Array(data.height);
+    this.active = !!data.active;
   }
 
   static deserialize(data) {

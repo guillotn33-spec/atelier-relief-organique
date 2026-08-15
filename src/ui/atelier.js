@@ -7,7 +7,8 @@
 // curseur de lumière.
 
 import { clamp } from '../core/math.js';
-import { PRESETS, applyPreset, aspectOf } from '../core/project.js';
+import { PRESETS, applyPreset, aspectOf, baseGeometryOf, captureBase } from '../core/project.js';
+import { nextVariation } from '../geometry/variation.js';
 import { buildHeightmap, updateHeightmapRect } from '../geometry/heightmap.js';
 import { createRenderCache, renderFull, renderPatch } from '../render2d/renderer.js';
 import { stamp } from '../sculpt/brush.js';
@@ -30,14 +31,18 @@ const BINDINGS = {
   heightCm: { scope: 'size', read: (p) => p.heightCm, write: (p, v) => { p.heightCm = v; }, format: (v) => `${v} cm` },
   depthCm: { scope: 'meta', read: (p) => p.depthCm, write: (p, v) => { p.depthCm = v; }, format: (v) => `${v} cm` },
 
-  count: { scope: 'geometry', read: (p) => p.geometry.count, write: (p, v) => { p.geometry.count = v; }, format: (v) => `${v}` },
-  scale: { scope: 'geometry', read: (p) => Math.round(p.geometry.scale * 100), write: (p, v) => { p.geometry.scale = v / 100; }, format: (v) => `${v} %` },
+  basinScaleCm: { scope: 'geometry', read: (p) => Math.round(p.geometry.basinScaleCm), write: (p, v) => { p.geometry.basinScaleCm = v; }, format: (v) => `${v} cm` },
+  density: { scope: 'geometry', read: (p) => Math.round(p.geometry.density * 100), write: (p, v) => { p.geometry.density = v / 100; }, format: (v) => `${v} %` },
+  channelWeight: { scope: 'geometry', read: (p) => Math.round(p.geometry.channelWeight * 100), write: (p, v) => { p.geometry.channelWeight = v / 100; }, format: (v) => `${v} %` },
   elongation: { scope: 'geometry', read: (p) => Math.round(p.geometry.elongation * 100), write: (p, v) => { p.geometry.elongation = v / 100; }, format: (v) => `${v} %` },
-  flow: { scope: 'geometry', read: (p) => Math.round(p.geometry.flow * 100), write: (p, v) => { p.geometry.flow = v / 100; }, format: (v) => `${v} %` },
+  orientationDeg: { scope: 'geometry', read: (p) => Math.round(p.geometry.orientationDeg), write: (p, v) => { p.geometry.orientationDeg = v; }, format: (v) => `${v}°` },
+  warpAmount: { scope: 'geometry', read: (p) => Math.round(p.geometry.warpAmount * 100), write: (p, v) => { p.geometry.warpAmount = v / 100; }, format: (v) => `${v} %` },
   irregularity: { scope: 'geometry', read: (p) => Math.round(p.geometry.irregularity * 100), write: (p, v) => { p.geometry.irregularity = v / 100; }, format: (v) => `${v} %` },
   depth: { scope: 'geometry', read: (p) => Math.round(p.geometry.depth * 100), write: (p, v) => { p.geometry.depth = v / 100; }, format: (v) => `${v} %` },
+  shoulder: { scope: 'geometry', read: (p) => Math.round(p.geometry.shoulder * 100), write: (p, v) => { p.geometry.shoulder = v / 100; }, format: (v) => `${v} %` },
   softness: { scope: 'geometry', read: (p) => Math.round(p.geometry.softness * 100), write: (p, v) => { p.geometry.softness = v / 100; }, format: (v) => `${v} %` },
   wave: { scope: 'geometry', read: (p) => Math.round(p.geometry.wave * 100), write: (p, v) => { p.geometry.wave = v / 100; }, format: (v) => `${v} %` },
+  negative: { scope: 'geometry', kind: 'checkbox', read: (p) => p.geometry.negative, write: (p, v) => { p.geometry.negative = v; } },
 
   texture: { scope: 'shading', read: (p) => Math.round(p.material.texture * 100), write: (p, v) => { p.material.texture = v / 100; }, format: (v) => `${v} %` },
   materialColor: { scope: 'shading', kind: 'color', read: (p) => p.material.color, write: (p, v) => { p.material.color = v; } },
@@ -93,7 +98,7 @@ export class Atelier {
     this.lightBusy = false;
     this.pointers = new Set();
 
-    this.anim = { enabled: false, raf: 0, state: null, quality: 0.45, lastTs: 0, avg: 0 };
+    this.anim = { enabled: false, raf: 0, canvas: null, cache: null, quality: 0.45, lastTs: 0, avg: 0 };
 
     this.saveProjectTimer = 0;
     this.saveSculptTimer = 0;
@@ -179,6 +184,7 @@ export class Atelier {
     });
     this.updateControlDisplays();
     this.updateBrushDisplays();
+    this.refreshBaseButton();
   }
 
   updateControlDisplays() {
@@ -485,6 +491,45 @@ export class Atelier {
     }
   }
 
+  // ---- Génération : variation, base, retour base (§4) ----
+
+  newVariation() {
+    this.project.geometry = nextVariation(this.project.geometry);
+    this.project.ui.presetKey = null;
+    this.project.ui.designName = 'Variation ' + String(this.project.geometry.variationSeed).slice(-4);
+    this.root.querySelectorAll('.preset').forEach((b) => b.classList.remove('active'));
+    this.syncControlsFromProject();
+    this.rebuild();
+    this.scheduleSaveProject();
+  }
+
+  setBase() {
+    this.project.baseDesignSnapshot = captureBase(this.project, this.layer);
+    this.refreshBaseButton();
+    this.scheduleSaveProject();
+  }
+
+  restoreBase() {
+    const snapshot = this.project.baseDesignSnapshot;
+    if (!snapshot) return;
+    // On restaure les VRAIES données, sculpture comprise, pas une approximation.
+    this.pushUndo();
+    this.project.geometry = baseGeometryOf(snapshot, this.project.geometry);
+    this.layer.adopt(snapshot.sculpt);
+    this.project.ui.presetKey = null;
+    this.project.ui.designName = 'Base';
+    this.root.querySelectorAll('.preset').forEach((b) => b.classList.remove('active'));
+    this.syncControlsFromProject();
+    this.rebuild();
+    this.scheduleSaveProject();
+    this.scheduleSaveSculpt();
+  }
+
+  refreshBaseButton() {
+    const button = this.root.querySelector('#restoreBase');
+    if (button) button.disabled = !this.project.baseDesignSnapshot;
+  }
+
   // ---- Annuler / rétablir ----
 
   pushUndo() {
@@ -529,16 +574,12 @@ export class Atelier {
       });
     });
 
-    const randomize = () => {
-      this.project.geometry.seed = Math.floor(1000 + Math.random() * 8999);
-      this.project.ui.presetKey = null;
-      this.project.ui.designName = 'Variation ' + this.project.geometry.seed;
-      this.root.querySelectorAll('.preset').forEach((b) => b.classList.remove('active'));
-      this.rebuild();
-      this.scheduleSaveProject();
-    };
-    this.root.querySelector('#randomizeTop').addEventListener('click', randomize);
-    this.root.querySelector('#randomizeMobile').addEventListener('click', randomize);
+    const variation = () => this.newVariation();
+    this.root.querySelector('#variationTop').addEventListener('click', variation);
+    this.root.querySelector('#variationMobile').addEventListener('click', variation);
+    this.root.querySelector('#newVariation').addEventListener('click', variation);
+    this.root.querySelector('#setBase').addEventListener('click', () => this.setBase());
+    this.root.querySelector('#restoreBase').addEventListener('click', () => this.restoreBase());
 
     const exportPng = (event) => this.exportPng(event.currentTarget);
     this.root.querySelector('#exportTop').addEventListener('click', exportPng);
@@ -590,94 +631,55 @@ export class Atelier {
 
   restartAnim() {
     if (!this.anim.enabled || !this.hm) return;
-    this.buildAnimState();
+    if (!this.anim.canvas) {
+      this.anim.canvas = document.createElement('canvas');
+      this.anim.cache = createRenderCache();
+    }
     if (!this.anim.raf) this.anim.raf = requestAnimationFrame((ts) => this.animFrame(ts));
   }
 
   stopAnim() {
     if (this.anim.raf) cancelAnimationFrame(this.anim.raf);
     this.anim.raf = 0;
-    this.anim.state = null;
     this.anim.avg = 0;
     this.render();
   }
 
-  buildAnimState() {
-    const quality = this.anim.quality;
-    const scaled = {
-      ...this.project,
-      widthCm: this.project.widthCm,
-      heightCm: this.project.heightCm,
-    };
-    const hm = buildHeightmap(scaled, this.layer, { withSwell: false });
-    const n = hm.cols * hm.rows;
-    const sx = new Float32Array(n);
-    const sy = new Float32Array(n);
-    const halfW = this.project.widthCm / 2;
-    const halfH = this.project.heightCm / 2;
-    const invW = 1 / this.project.widthCm;
-    const invH = 1 / this.project.heightCm;
-    for (let r = 0; r < hm.rows; r++) {
-      const yCm = hm.yCmAt(r);
-      const v = (yCm + halfH) * invH;
-      for (let c = 0; c < hm.cols; c++) {
-        const xCm = hm.xCmAt(c);
-        const u = (xCm + halfW) * invW;
-        const i = r * hm.cols + c;
-        sx[i] = u + (this.layer.active ? this.layer.sample(this.layer.warpX, xCm, yCm) * invW : 0);
-        sy[i] = v + (this.layer.active ? this.layer.sample(this.layer.warpY, xCm, yCm) * invH : 0);
-      }
-    }
-    const { outW, outH } = this.outputSize();
-    this.anim.state = {
-      hm,
-      staticMap: hm.h.slice(),
-      sx,
-      sy,
-      canvas: document.createElement('canvas'),
-      cache: createRenderCache(),
-      outW: Math.max(64, Math.round(outW * quality)),
-      outH: Math.max(1, Math.round(outH * quality)),
-    };
-  }
-
   animFrame(ts) {
     this.anim.raf = requestAnimationFrame((next) => this.animFrame(next));
-    if (!this.anim.enabled || !this.anim.state || document.hidden || this.stroke || this.lightPointerId !== null) return;
-    if (ts - this.anim.lastTs < 33) return;
+    if (!this.anim.enabled || document.hidden || this.stroke || this.lightPointerId !== null) return;
+    if (ts - this.anim.lastTs < 40) return;
     this.anim.lastTs = ts;
 
     const start = performance.now();
-    this.drawAnimFrame(ts * 0.00045);
+    this.drawAnimFrame(ts * 0.00016);
     const dt = performance.now() - start;
     this.anim.avg = this.anim.avg ? this.anim.avg * 0.8 + dt * 0.2 : dt;
-    if (this.anim.avg > 30 && this.anim.quality > 0.2) {
-      this.anim.quality = Math.max(0.2, this.anim.quality * 0.72);
+    if (this.anim.avg > 34 && this.anim.quality > 0.18) {
+      this.anim.quality = Math.max(0.18, this.anim.quality * 0.75);
       this.anim.avg = 0;
-      this.buildAnimState();
     }
   }
 
+  /**
+   * Le champ étant une fonction pure des centimètres, animer l'ondulation revient
+   * à faire défiler le domaine de la HOULE PORTEUSE et à rééchantillonner le champ
+   * sur une grille plus grossière. La structure des creux ne bouge pas ; c'est la
+   * houle qui traverse la pièce. Le moteur v1 gardait sa carte statique et ajoutait
+   * une sinusoïde par-dessus — c'est précisément ce qui posait une bosse au fond
+   * des cavités.
+   */
   drawAnimFrame(phase) {
-    const state = this.anim.state;
-    const { hm, staticMap, sx, sy } = state;
-    const { swellAmp, p1, p2, p3 } = hm.ctx;
-    const tau = Math.PI * 2;
-    for (let i = 0; i < staticMap.length; i++) {
-      const x = sx[i];
-      const y = sy[i];
-      hm.h[i] =
-        staticMap[i] +
-        swellAmp *
-          (0.5 * Math.sin((x * 0.8 + y * 0.55) * tau * 1.15 + p1 + phase) +
-            0.32 * Math.sin((x * 0.45 - y * 1.05) * tau * 1.35 + p2 + phase * 0.7) +
-            0.18 * Math.sin((x * 1.5 + y * 1.3) * tau * 0.8 + p3 + phase * 1.35));
-    }
-    renderFull(state.canvas, this.project, hm, state.outW, state.outH, state.cache);
+    const quality = this.anim.quality;
+    const hm = buildHeightmap(this.project, this.layer, { quality, carrierPhase: phase, tPhase: phase });
+    const { outW, outH } = this.outputSize();
+    const w = Math.max(64, Math.round(outW * quality));
+    const h = Math.max(1, Math.round(outH * quality));
+    renderFull(this.anim.canvas, this.project, hm, w, h, this.anim.cache);
     const ctx = this.canvas.getContext('2d', { alpha: true });
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(state.canvas, 0, 0, this.canvas.width, this.canvas.height);
+    ctx.drawImage(this.anim.canvas, 0, 0, this.canvas.width, this.canvas.height);
   }
 
   // ---- Export ----

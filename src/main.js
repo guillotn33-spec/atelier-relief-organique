@@ -8,7 +8,16 @@ import { Atelier } from './ui/atelier.js';
 import { buildProjectFromLegacy } from './persistence/migrate.js';
 import * as db from './persistence/db.js';
 
-/** Complète un projet relu en base avec les valeurs par défaut manquantes. */
+/**
+ * Complète un projet relu en base avec les valeurs par défaut manquantes.
+ *
+ * Les projets écrits au lot 1 portent `engine: 'legacy-v1'` et les paramètres du
+ * moteur v1 (count, scale, flow), qui n'ont pas d'équivalent dans `organic-v2`.
+ * Plutôt que de laisser l'interface piloter des champs inexistants, on repart des
+ * valeurs par défaut du nouveau moteur en conservant la graine. Le moteur v1
+ * reste accessible au code — c'est l'oracle de non-régression des tests — mais
+ * plus aucun projet ne s'ouvre dessus.
+ */
 function hydrate(stored) {
   const base = createProject({
     canvasShape: stored.canvasShape,
@@ -17,10 +26,15 @@ function hydrate(stored) {
     depthCm: stored.depthCm,
     name: stored.name,
   });
+  const storedGeometry = stored.geometry || {};
+  const geometry =
+    storedGeometry.engine === 'legacy-v1'
+      ? { ...defaultGeometry(), seed: storedGeometry.seed ?? defaultGeometry().seed }
+      : { ...defaultGeometry(), ...storedGeometry };
   return {
     ...base,
     ...stored,
-    geometry: { ...defaultGeometry(), ...(stored.geometry || {}) },
+    geometry,
     material: { ...defaultMaterial(), ...(stored.material || {}) },
     lighting: { ...defaultLighting(), ...(stored.lighting || {}) },
     presentation: { ...defaultPresentation(), ...(stored.presentation || {}) },

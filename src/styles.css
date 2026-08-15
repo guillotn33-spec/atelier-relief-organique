@@ -180,6 +180,11 @@ canvas { display: block; width: 100%; height: 100%; }
 .backdrop.show { opacity: 1; pointer-events: auto; }
 .mobile-actions { display: none; }
 
+.variation-actions { display: grid; gap: 7px; padding: 15px; border-bottom: 1px solid var(--line); }
+.variation-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.variation-actions .btn { width: 100%; padding: 0 10px; font-size: 12px; }
+.variation-actions .btn:disabled { opacity: .38; cursor: default; transform: none; }
+
 /* ---- Écran de création (§2) ---- */
 
 .creation {

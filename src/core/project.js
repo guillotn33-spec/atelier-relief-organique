@@ -73,21 +73,64 @@ export function validateDimensions(shape, input) {
   return { ok: Object.keys(errors).length === 0, dimensions, errors };
 }
 
+// Paramètres du moteur `organic-v2`. Les longueurs sont en CENTIMÈTRES, tout le
+// reste est normalisé 0..1 (sauf l'orientation, en degrés).
+//
+// Deux paramètres du moteur v1 ont disparu et ne peuvent pas revenir :
+// « Nombre de cavités » et « Taille des formes ». Un champ continu ancré en cm
+// n'a pas de nombre de cavités — ce nombre dépend de la fenêtre par laquelle on
+// le regarde. Ils sont remplacés par « Taille des cavités », en centimètres, qui
+// est une propriété de l'œuvre et non de son cadrage.
 export function defaultGeometry() {
   return {
-    engine: 'legacy-v1',
+    engine: 'organic-v2',
     seed: 2749,
-    count: 9,
-    scale: 1.4,
-    elongation: 0.65,
-    flow: 0.7,
+    variationSeed: 0,
+    domainOffsetXCm: 0,
+    domainOffsetYCm: 0,
+
+    basinScaleCm: 52,
+    channelRatio: 0.52,
+    channelWeight: 0.55,
+    density: 0.48,
+    elongation: 0.55,
+    orientationDeg: 22,
+    warpAmount: 0.62,
     irregularity: 0.35,
     depth: 0.92,
-    softness: 0.62,
-    wave: 0.6,
+    softness: 0.55,
+    wave: 0.5,
+    shoulder: 0.5,
+    fuse: 0.55,
+
     negative: false,
   };
 }
+
+export const GEOMETRY_BOUNDS = {
+  basinScaleCm: [8, 160],
+  // Plancher à 0,55 : des chenaux beaucoup plus fins que les bassins n'ont pas
+  // le comportement attendu. Au lieu de RELIER les bols, ils ondulent DEDANS et
+  // y laissent des bosses enclavées. Mesuré sur 48 variations, proéminence
+  // maximale d'îlot selon le plancher : 0,20 → 15,6 % ; 0,45 → 7,2 % ;
+  // 0,55 → 2,8 %. Ce n'est pas une préférence esthétique, c'est une borne.
+  channelRatio: [0.55, 0.9],
+  channelWeight: [0, 1],
+  // Bornes resserrées après mesure. Sous 0,18 presque rien n'est creusé ; au-delà
+  // de 0,72 la quasi-totalité de la surface l'est, le relief s'aplatit faute de
+  // plateaux, et les minima locaux du bruit se mettent à ressortir en îlots.
+  // Les deux extrêmes sont sans intérêt plastique et hors garantie.
+  density: [0.18, 0.72],
+  elongation: [0, 1],
+  orientationDeg: [0, 180],
+  warpAmount: [0, 1],
+  irregularity: [0, 1],
+  depth: [0.2, 1],
+  softness: [0.05, 1],
+  wave: [0, 1],
+  shoulder: [0.05, 1],
+  fuse: [0, 1],
+};
 
 export function defaultMaterial() {
   return { color: '#e8e4dc', texture: 0.3, finish: 'mat' };
@@ -200,24 +243,42 @@ function clampTo(value, bound) {
 // La séparation géométrie / lumière / présentation exigée par §4 est structurelle :
 // « Nouvelle variation » ne mutera QUE le bloc geometry.
 
+// Les trois préréglages sont recalibrés pour `organic-v2`. Ils gardent leur
+// intention — Dunes coule, Cellules se resserre, Archipel se disperse — mais
+// exploitent la fusion des formes, que le moteur v1 ne savait pas produire.
 export const PRESETS = {
   dunes: {
     name: 'Dunes',
-    geometry: { seed: 2749, count: 9, scale: 1.4, elongation: 0.65, flow: 0.7, irregularity: 0.35, depth: 0.92, softness: 0.62, wave: 0.6 },
+    geometry: {
+      seed: 2749, domainOffsetXCm: 0, domainOffsetYCm: 0, variationSeed: 0,
+      basinScaleCm: 44, channelRatio: 0.55, channelWeight: 0.58, density: 0.50,
+      elongation: 0.38, orientationDeg: 16, warpAmount: 0.50, irregularity: 0.30,
+      depth: 0.95, softness: 0.50, wave: 0.55, shoulder: 0.58, fuse: 0.60,
+    },
     material: { color: '#e8e4dc', texture: 0.3 },
     lighting: { angle: 245, height: 42, contrast: 0.8, backlight: 0.58 },
     presentation: { panelLayout: 'none', frame: true, wallColor: '#d8d3c9' },
   },
   cellules: {
     name: 'Cellules',
-    geometry: { seed: 8315, count: 17, scale: 1.0, elongation: 0.26, flow: 0.48, irregularity: 0.43, depth: 0.7, softness: 0.68, wave: 0.35 },
+    geometry: {
+      seed: 8315, domainOffsetXCm: 0, domainOffsetYCm: 0, variationSeed: 0,
+      basinScaleCm: 38, channelRatio: 0.64, channelWeight: 0.20, density: 0.60,
+      elongation: 0.10, orientationDeg: 0, warpAmount: 0.28, irregularity: 0.30,
+      depth: 0.86, softness: 0.50, wave: 0.26, shoulder: 0.56, fuse: 0.30,
+    },
     material: { color: '#d8d2c7', texture: 0.34 },
     lighting: { angle: 218, height: 42, contrast: 0.78, backlight: 0.68 },
     presentation: { panelLayout: '2x2', frame: false, wallColor: '#c9c4ba' },
   },
   archipel: {
     name: 'Archipel',
-    geometry: { seed: 5172, count: 12, scale: 1.0, elongation: 0.52, flow: 0.79, irregularity: 0.72, depth: 0.84, softness: 0.76, wave: 0.68 },
+    geometry: {
+      seed: 5172, domainOffsetXCm: 0, domainOffsetYCm: 0, variationSeed: 0,
+      basinScaleCm: 44, channelRatio: 0.58, channelWeight: 0.72, density: 0.56,
+      elongation: 0.26, orientationDeg: 42, warpAmount: 0.62, irregularity: 0.48,
+      depth: 0.88, softness: 0.52, wave: 0.58, shoulder: 0.50, fuse: 0.70,
+    },
     material: { color: '#e4dfd6', texture: 0.18 },
     lighting: { angle: 232, height: 38, contrast: 0.83, backlight: 0.48 },
     presentation: { panelLayout: '2x2', frame: false, wallColor: '#d5d0c6' },
@@ -229,11 +290,31 @@ export function applyPreset(project, key) {
   if (!preset) return project;
   return {
     ...project,
-    geometry: { ...project.geometry, ...preset.geometry },
+    // `negative` est un MODE d'affichage du relief, pas une donnée de composition :
+    // changer de préréglage ne doit pas le remettre à zéro en douce.
+    geometry: { ...project.geometry, ...preset.geometry, negative: project.geometry.negative },
     material: { ...project.material, ...preset.material },
     lighting: { ...project.lighting, ...preset.lighting },
     presentation: { ...project.presentation, ...preset.presentation },
     ui: { ...project.ui, presetKey: key, designName: preset.name },
     updatedAt: Date.now(),
   };
+}
+
+// ---- Instantané de base (§4) ----
+// « Définir comme base » mémorise l'état géométrique EXACT, sculpture comprise.
+// « Retour base » restaure ces données, pas une approximation visuelle.
+
+export function captureBase(project, layer) {
+  return {
+    geometry: { ...project.geometry },
+    sculpt: layer && layer.active ? layer.serialize() : null,
+    takenAt: Date.now(),
+  };
+}
+
+export function baseGeometryOf(snapshot, currentGeometry) {
+  // Le mode négatif reste sous la main de l'utilisateur : revenir à la base
+  // restitue la composition, pas l'état du bouton Négatif.
+  return { ...snapshot.geometry, negative: currentGeometry.negative };
 }

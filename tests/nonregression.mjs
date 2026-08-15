@@ -81,7 +81,12 @@ function compare(a, b) {
   };
 }
 
+// Ces tests éprouvent l'ARCHITECTURE du lot 1 — grille canonique en cm puis
+// rééchantillonnage — contre le champ de la version 1. Ils doivent donc rester
+// sur le moteur v1, qui n'est plus le moteur par défaut depuis le lot 2 mais
+// reste dans le code exactement pour cet usage.
 const CFG = {
+  engine: 'legacy-v1',
   count: 9,
   scale: 1.4,
   elongation: 0.65,
