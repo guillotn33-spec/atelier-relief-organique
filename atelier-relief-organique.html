@@ -1,0 +1,1693 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#171715">
+  <title>Atelier de relief organique</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #f4f0e8;
+      --muted: #aaa69d;
+      --line: rgba(255, 255, 255, .11);
+      --panel: #1b1b19;
+      --panel-2: #22221f;
+      --accent: #d9ff74;
+      --accent-ink: #182006;
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { min-height: 100%; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 80% -10%, rgba(217, 255, 116, .06), transparent 35%),
+        #11110f;
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input, select { font: inherit; }
+
+    button { color: inherit; }
+
+    .app {
+      width: min(1540px, 100%);
+      margin: 0 auto;
+      padding: 22px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 22px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      width: 36px;
+      aspect-ratio: 1;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(217, 255, 116, .44);
+      border-radius: 50%;
+      color: var(--accent);
+      font-size: 18px;
+      flex: 0 0 auto;
+    }
+
+    .eyebrow {
+      margin: 0 0 2px;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .19em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(20px, 3vw, 30px);
+      font-weight: 550;
+      letter-spacing: -.035em;
+    }
+
+    .top-actions { display: flex; gap: 9px; }
+
+    .btn {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 15px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #20201d;
+      cursor: pointer;
+      transition: transform .18s ease, border-color .18s ease, background .18s ease;
+    }
+
+    .btn:hover { transform: translateY(-1px); border-color: rgba(255,255,255,.24); }
+    .btn:active { transform: translateY(0); }
+    .btn:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .btn-primary {
+      border-color: transparent;
+      background: var(--accent);
+      color: var(--accent-ink);
+      font-weight: 750;
+    }
+
+    .btn-icon { font-size: 18px; line-height: 1; }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 330px minmax(0, 1fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .sidebar {
+      background: linear-gradient(180deg, var(--panel-2), var(--panel));
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .sidebar-intro { padding: 20px 20px 15px; }
+
+    .sidebar-intro p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .presets {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 7px;
+      padding: 0 15px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .preset {
+      min-height: 44px;
+      padding: 10px 6px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: rgba(255,255,255,.025);
+      color: var(--muted);
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .preset:hover { color: var(--ink); background: rgba(255,255,255,.05); }
+    .preset.active { color: var(--accent); border-color: rgba(217,255,116,.42); background: rgba(217,255,116,.06); }
+
+    details { border-bottom: 1px solid var(--line); }
+    details:last-child { border-bottom: 0; }
+
+    summary {
+      list-style: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 49px;
+      padding: 0 18px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .02em;
+      user-select: none;
+    }
+
+    summary::-webkit-details-marker { display: none; }
+    summary::after { content: "+"; color: var(--muted); font-size: 18px; font-weight: 400; }
+    details[open] summary::after { content: "−"; }
+
+    .control-list { padding: 1px 18px 18px; display: grid; gap: 15px; }
+
+    .control { display: grid; gap: 7px; }
+
+    .control-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      color: #dedbd4;
+      font-size: 12px;
+    }
+
+    .control-value { color: var(--accent); font-variant-numeric: tabular-nums; }
+
+    input[type="range"] {
+      width: 100%;
+      height: 44px;
+      appearance: none;
+      background: transparent;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 4px;
+      border-radius: 99px;
+      background: linear-gradient(90deg, var(--accent) var(--range, 50%), rgba(255,255,255,.13) var(--range, 50%));
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      width: 22px;
+      height: 22px;
+      margin-top: -9px;
+      appearance: none;
+      border: 3px solid #25251f;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 1px rgba(217,255,116,.5);
+    }
+
+    input[type="range"]::-moz-range-track {
+      height: 4px;
+      border-radius: 99px;
+      background: linear-gradient(90deg, var(--accent) var(--range, 50%), rgba(255,255,255,.13) var(--range, 50%));
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      border: 3px solid #25251f;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .select, .color-row {
+      width: 100%;
+      min-height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #171715;
+      color: var(--ink);
+    }
+
+    .select { padding: 0 10px; }
+
+    .color-row {
+      display: grid;
+      grid-template-columns: 1fr 48px;
+      align-items: center;
+      padding-left: 10px;
+      font-size: 12px;
+    }
+
+    input[type="color"] {
+      width: 48px;
+      height: 42px;
+      padding: 6px;
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .switch-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 44px;
+      color: #dedbd4;
+      font-size: 12px;
+    }
+
+    .switch { position: relative; width: 50px; height: 28px; flex: 0 0 auto; }
+    .switch input { position: absolute; opacity: 0; pointer-events: none; }
+    .switch span { position: absolute; inset: 0; border-radius: 99px; background: #343430; cursor: pointer; transition: .2s; }
+    .switch span::after { content: ""; position: absolute; width: 22px; height: 22px; left: 3px; top: 3px; border-radius: 50%; background: #aaa79f; transition: .2s; }
+    .switch input:checked + span { background: rgba(217,255,116,.25); }
+    .switch input:checked + span::after { transform: translateX(22px); background: var(--accent); }
+
+    .stage-shell {
+      min-width: 0;
+      min-height: 720px;
+      display: grid;
+      grid-template-rows: 1fr auto;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #171715;
+    }
+
+    .stage {
+      --wall: #d8d3c9;
+      --glow-alpha: .5;
+      min-height: 620px;
+      position: relative;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      padding: clamp(26px, 6vw, 82px);
+      background:
+        radial-gradient(ellipse at 50% 42%, rgba(255,255,255,.36), transparent 60%),
+        var(--wall);
+      isolation: isolate;
+    }
+
+    .stage::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: .2;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.12'/%3E%3C/svg%3E");
+      mix-blend-mode: multiply;
+    }
+
+    .art-wrap {
+      width: min(100%, 1080px);
+      aspect-ratio: 1.6;
+      position: relative;
+      z-index: 1;
+      background: #c9c5bc;
+      box-shadow:
+        0 24px 40px rgba(24, 22, 18, .28),
+        0 0 calc(34px + 38px * var(--glow-alpha)) rgba(255, 224, 165, var(--glow-alpha));
+      cursor: crosshair;
+      touch-action: none;
+      transition: box-shadow .25s ease;
+    }
+
+    .art-wrap::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.15);
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .rendering {
+      position: absolute;
+      z-index: 3;
+      top: 17px;
+      right: 17px;
+      padding: 7px 10px;
+      border-radius: 99px;
+      background: rgba(20,20,18,.76);
+      color: #eeeae2;
+      font-size: 11px;
+      opacity: 0;
+      transform: translateY(-4px);
+      transition: .18s;
+      pointer-events: none;
+      backdrop-filter: blur(8px);
+    }
+
+    .rendering.show { opacity: 1; transform: translateY(0); }
+
+    .stage-footer {
+      min-height: 62px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 12px 18px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .stage-footer strong { color: var(--ink); font-weight: 650; }
+    .hint { display: flex; align-items: center; gap: 8px; }
+    .hint-symbol { color: var(--accent); font-size: 17px; }
+
+    .toolbar {
+      position: absolute;
+      z-index: 4;
+      left: 50%;
+      bottom: 12px;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      max-width: calc(100% - 24px);
+      overflow-x: auto;
+      padding: 7px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, .14);
+      background: rgba(20, 20, 18, .84);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      scrollbar-width: none;
+      touch-action: pan-x;
+    }
+
+    .toolbar::-webkit-scrollbar { display: none; }
+
+    .tool {
+      min-width: 48px;
+      min-height: 48px;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1px;
+      padding: 4px 7px;
+      border: 1px solid transparent;
+      border-radius: 12px;
+      background: transparent;
+      color: #cfccc4;
+      font-size: 10px;
+      cursor: pointer;
+      flex: 0 0 auto;
+      touch-action: manipulation;
+    }
+
+    .tool .tool-icon { font-size: 17px; line-height: 1.25; }
+    .tool.active { color: var(--accent); border-color: rgba(217, 255, 116, .45); background: rgba(217, 255, 116, .08); }
+    .tool:disabled { opacity: .35; cursor: default; }
+
+    .tool-sep { width: 1px; align-self: stretch; margin: 5px 3px; background: rgba(255, 255, 255, .14); flex: 0 0 auto; }
+
+    .tool-slider {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: center;
+      min-height: 48px;
+      padding: 0 6px;
+      color: #cfccc4;
+      font-size: 10px;
+      flex: 0 0 auto;
+    }
+
+    .tool-slider input[type="range"] { width: 96px; height: 44px; }
+
+    .drawer-toggle { display: none; }
+
+    .backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 39;
+      background: rgba(10, 10, 9, .52);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .22s ease;
+    }
+
+    .backdrop.show { opacity: 1; pointer-events: auto; }
+
+    .mobile-actions { display: none; }
+
+    @media (max-width: 980px) {
+      .workspace { grid-template-columns: 1fr; }
+      .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        z-index: 40;
+        width: min(340px, 88vw);
+        overflow-y: auto;
+        border-radius: 0 var(--radius) var(--radius) 0;
+        transform: translateX(-105%);
+        transition: transform .24s ease;
+      }
+      .sidebar.open { transform: none; box-shadow: 0 10px 50px rgba(0, 0, 0, .5); }
+      .drawer-toggle { display: inline-flex; }
+      .stage-shell { min-height: auto; }
+      .stage { min-height: 480px; }
+    }
+
+    @media (max-width: 620px) {
+      .app { padding: 13px; }
+      .topbar { align-items: flex-start; }
+      .top-actions .btn:first-child { display: none; }
+      .btn-primary .btn-label { display: none; }
+      .stage { min-height: 350px; padding: 35px 17px; }
+      .stage-footer { align-items: flex-start; flex-direction: column; gap: 5px; }
+      .mobile-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 15px; border-bottom: 1px solid var(--line); }
+      .mobile-actions .btn { width: 100%; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">≈</div>
+        <div>
+          <p class="eyebrow">Relief lab</p>
+          <h1>Atelier de relief organique</h1>
+        </div>
+      </div>
+      <div class="top-actions">
+        <button class="btn drawer-toggle" id="drawerToggle" type="button" aria-expanded="false" aria-controls="sidebar"><span class="btn-icon" aria-hidden="true">☰</span> Réglages</button>
+        <button class="btn" id="randomizeTop" type="button"><span class="btn-icon" aria-hidden="true">↻</span> Nouvelle forme</button>
+        <button class="btn btn-primary" id="exportTop" type="button"><span class="btn-icon" aria-hidden="true">↓</span> <span class="btn-label">Exporter en PNG</span></button>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <div class="backdrop" id="backdrop" aria-hidden="true"></div>
+      <aside class="sidebar" id="sidebar" aria-label="Réglages du relief">
+        <div class="sidebar-intro">
+          <p>Choisissez une composition, puis ajustez sa matière, ses creux et sa lumière. Chaque rendu est calculé localement.</p>
+        </div>
+
+        <div class="presets" aria-label="Préréglages">
+          <button class="preset active" type="button" data-preset="dunes">Dunes</button>
+          <button class="preset" type="button" data-preset="cellules">Cellules</button>
+          <button class="preset" type="button" data-preset="archipel">Archipel</button>
+        </div>
+
+        <div class="mobile-actions">
+          <button class="btn" id="randomizeMobile" type="button">↻ Nouvelle forme</button>
+          <button class="btn btn-primary" id="exportMobile" type="button">↓ Exporter</button>
+        </div>
+
+        <details open>
+          <summary>Composition</summary>
+          <div class="control-list">
+            <label class="control">
+              <span class="control-head"><span>Nombre de cavités</span><output class="control-value" for="count" id="countValue"></output></span>
+              <input type="range" id="count" min="4" max="20" step="1" value="9">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Taille des formes</span><output class="control-value" for="scale" id="scaleValue"></output></span>
+              <input type="range" id="scale" min="55" max="150" step="1" value="140">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Allongement</span><output class="control-value" for="elongation" id="elongationValue"></output></span>
+              <input type="range" id="elongation" min="0" max="100" step="1" value="65">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Mouvement du dessin</span><output class="control-value" for="flow" id="flowValue"></output></span>
+              <input type="range" id="flow" min="0" max="100" step="1" value="70">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Irrégularité</span><output class="control-value" for="irregularity" id="irregularityValue"></output></span>
+              <input type="range" id="irregularity" min="0" max="100" step="1" value="35">
+            </label>
+          </div>
+        </details>
+
+        <details open>
+          <summary>Relief & matière</summary>
+          <div class="control-list">
+            <label class="control">
+              <span class="control-head"><span>Profondeur</span><output class="control-value" for="depth" id="depthValue"></output></span>
+              <input type="range" id="depth" min="20" max="100" step="1" value="92">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Douceur des arêtes</span><output class="control-value" for="softness" id="softnessValue"></output></span>
+              <input type="range" id="softness" min="5" max="100" step="1" value="62">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Ondulation</span><output class="control-value" for="wave" id="waveValue"></output></span>
+              <input type="range" id="wave" min="0" max="100" step="1" value="60">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Grain de surface</span><output class="control-value" for="texture" id="textureValue"></output></span>
+              <input type="range" id="texture" min="0" max="100" step="1" value="30">
+            </label>
+            <label class="color-row" for="materialColor">
+              <span>Couleur de matière</span>
+              <input type="color" id="materialColor" value="#e8e4dc">
+            </label>
+          </div>
+        </details>
+
+        <details open>
+          <summary>Sculpture</summary>
+          <div class="control-list">
+            <label class="switch-row" for="animate">
+              <span>Animer l’ondulation</span>
+              <span class="switch"><input type="checkbox" id="animate"><span aria-hidden="true"></span></span>
+            </label>
+            <button class="btn" id="clearSculpt" type="button"><span class="btn-icon" aria-hidden="true">⌫</span> Effacer la sculpture</button>
+          </div>
+        </details>
+
+        <details>
+          <summary>Lumière & présentation</summary>
+          <div class="control-list">
+            <label class="control">
+              <span class="control-head"><span>Direction</span><output class="control-value" for="lightAngle" id="lightAngleValue"></output></span>
+              <input type="range" id="lightAngle" min="0" max="359" step="1" value="245">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Hauteur de la lumière</span><output class="control-value" for="lightHeight" id="lightHeightValue"></output></span>
+              <input type="range" id="lightHeight" min="15" max="80" step="1" value="42">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Contraste</span><output class="control-value" for="contrast" id="contrastValue"></output></span>
+              <input type="range" id="contrast" min="20" max="100" step="1" value="80">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Halo arrière</span><output class="control-value" for="backlight" id="backlightValue"></output></span>
+              <input type="range" id="backlight" min="0" max="100" step="1" value="58">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Découpe du panneau</span></span>
+              <select class="select" id="panelLayout">
+                <option value="none">Panneau monobloc</option>
+                <option value="2x1">2 panneaux verticaux</option>
+                <option value="2x2">4 panneaux (2 × 2)</option>
+                <option value="3x2">6 panneaux (3 × 2)</option>
+              </select>
+            </label>
+            <label class="switch-row" for="frame">
+              <span>Cadre noir</span>
+              <span class="switch"><input type="checkbox" id="frame" checked><span aria-hidden="true"></span></span>
+            </label>
+            <label class="color-row" for="wallColor">
+              <span>Couleur du mur</span>
+              <input type="color" id="wallColor" value="#d8d3c9">
+            </label>
+          </div>
+        </details>
+      </aside>
+
+      <section class="stage-shell" aria-label="Aperçu du relief">
+        <div class="stage" id="stage">
+          <div class="rendering" id="rendering">Calcul du relief…</div>
+          <div class="art-wrap" id="artWrap">
+            <canvas id="reliefCanvas" role="img" aria-label="Aperçu d’un panneau mural abstrait en relief organique"></canvas>
+          </div>
+          <div class="toolbar" id="toolbar" role="toolbar" aria-label="Outils de sculpture">
+            <button class="tool active" type="button" data-tool="light"><span class="tool-icon" aria-hidden="true">☀</span>Lumière</button>
+            <button class="tool" type="button" data-tool="warp"><span class="tool-icon" aria-hidden="true">〰</span>Onduler</button>
+            <button class="tool" type="button" data-tool="dig"><span class="tool-icon" aria-hidden="true">◡</span>Creuser</button>
+            <button class="tool" type="button" data-tool="raise"><span class="tool-icon" aria-hidden="true">◠</span>Bomber</button>
+            <button class="tool" type="button" data-tool="smooth"><span class="tool-icon" aria-hidden="true">≋</span>Lisser</button>
+            <button class="tool" type="button" data-tool="erase"><span class="tool-icon" aria-hidden="true">⌫</span>Gomme</button>
+            <span class="tool-sep" aria-hidden="true"></span>
+            <button class="tool" type="button" id="undoBtn" disabled><span class="tool-icon" aria-hidden="true">↶</span>Annuler</button>
+            <button class="tool" type="button" id="redoBtn" disabled><span class="tool-icon" aria-hidden="true">↷</span>Rétablir</button>
+            <span class="tool-sep" aria-hidden="true"></span>
+            <label class="tool-slider">Taille<input type="range" id="brushSize" min="4" max="25" step="1" value="12"></label>
+            <label class="tool-slider">Force<input type="range" id="brushStrength" min="10" max="100" step="1" value="55"></label>
+          </div>
+        </div>
+        <footer class="stage-footer">
+          <div><strong id="designName">Dunes</strong> · graine <span id="seedLabel">2749</span> · export 1920 × 1200 px</div>
+          <div class="hint"><span class="hint-symbol" id="hintSymbol" aria-hidden="true">☀</span> <span id="hintText">Glissez sur l’œuvre pour déplacer la lumière</span></div>
+        </footer>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const canvas = document.getElementById('reliefCanvas');
+      const artWrap = document.getElementById('artWrap');
+      const stage = document.getElementById('stage');
+      const rendering = document.getElementById('rendering');
+      const seedLabel = document.getElementById('seedLabel');
+      const designName = document.getElementById('designName');
+
+      const controlIds = [
+        'count', 'scale', 'elongation', 'flow', 'irregularity',
+        'depth', 'softness', 'wave', 'texture', 'materialColor',
+        'lightAngle', 'lightHeight', 'contrast', 'backlight',
+        'panelLayout', 'frame', 'wallColor'
+      ];
+      const controls = Object.fromEntries(controlIds.map(id => [id, document.getElementById(id)]));
+
+      const presets = {
+        dunes: {
+          name: 'Dunes', seed: 2749, count: 9, scale: 140, elongation: 65, flow: 70,
+          irregularity: 35, depth: 92, softness: 62, wave: 60, texture: 30,
+          materialColor: '#e8e4dc', lightAngle: 245, lightHeight: 42, contrast: 80,
+          backlight: 58, panelLayout: 'none', frame: true, wallColor: '#d8d3c9'
+        },
+        cellules: {
+          name: 'Cellules', seed: 8315, count: 17, scale: 100, elongation: 26, flow: 48,
+          irregularity: 43, depth: 70, softness: 68, wave: 35, texture: 34,
+          materialColor: '#d8d2c7', lightAngle: 218, lightHeight: 42, contrast: 78,
+          backlight: 68, panelLayout: '2x2', frame: false, wallColor: '#c9c4ba'
+        },
+        archipel: {
+          name: 'Archipel', seed: 5172, count: 12, scale: 100, elongation: 52, flow: 79,
+          irregularity: 72, depth: 84, softness: 76, wave: 68, texture: 18,
+          materialColor: '#e4dfd6', lightAngle: 232, lightHeight: 38, contrast: 83,
+          backlight: 48, panelLayout: '2x2', frame: false, wallColor: '#d5d0c6'
+        }
+      };
+
+      let seed = presets.dunes.seed;
+      let currentName = presets.dunes.name;
+      let renderToken = 0;
+      let lastFull = null;
+
+      // Calque de sculpture : grille normalisée fixe (rapport 1,6 comme l'œuvre),
+      // indépendante de la résolution de rendu — l'export HD reçoit la même sculpture.
+      const SW = 256, SH = 160;
+      const sculpt = {
+        warpX: new Float32Array(SW * SH),
+        warpY: new Float32Array(SW * SH),
+        height: new Float32Array(SW * SH)
+      };
+      let sculptActive = false;
+      let activeTool = 'light';
+      const undoStack = [];
+      const redoStack = [];
+
+      function sampleSculpt(field, u, v) {
+        const gx = clamp(u, 0, 1) * (SW - 1);
+        const gy = clamp(v, 0, 1) * (SH - 1);
+        const x0 = gx | 0, y0 = gy | 0;
+        const x1 = Math.min(SW - 1, x0 + 1), y1 = Math.min(SH - 1, y0 + 1);
+        const fx = gx - x0, fy = gy - y0;
+        const top = field[y0 * SW + x0] * (1 - fx) + field[y0 * SW + x1] * fx;
+        const bottom = field[y1 * SW + x0] * (1 - fx) + field[y1 * SW + x1] * fx;
+        return top + (bottom - top) * fy;
+      }
+
+      function mulberry32(a) {
+        return function() {
+          a |= 0;
+          a = a + 0x6D2B79F5 | 0;
+          let t = Math.imul(a ^ a >>> 15, 1 | a);
+          t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+          return ((t ^ t >>> 14) >>> 0) / 4294967296;
+        };
+      }
+
+      function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+      function smoothstep(a, b, x) {
+        const t = clamp((x - a) / (b - a), 0, 1);
+        return t * t * (3 - 2 * t);
+      }
+
+      function hexToRgb(hex) {
+        const value = parseInt(hex.slice(1), 16);
+        return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+      }
+
+      function readConfig() {
+        return {
+          count: +controls.count.value,
+          scale: +controls.scale.value / 100,
+          elongation: +controls.elongation.value / 100,
+          flow: +controls.flow.value / 100,
+          irregularity: +controls.irregularity.value / 100,
+          depth: +controls.depth.value / 100,
+          softness: +controls.softness.value / 100,
+          wave: +controls.wave.value / 100,
+          texture: +controls.texture.value / 100,
+          materialColor: controls.materialColor.value,
+          lightAngle: +controls.lightAngle.value,
+          lightHeight: +controls.lightHeight.value,
+          contrast: +controls.contrast.value / 100,
+          backlight: +controls.backlight.value / 100,
+          panelLayout: controls.panelLayout.value,
+          frame: controls.frame.checked,
+          wallColor: controls.wallColor.value,
+          seed
+        };
+      }
+
+      function createShapes(cfg) {
+        const rng = mulberry32(cfg.seed);
+        const shapes = [];
+        const base = 0.155 * cfg.scale * Math.sqrt(10 / cfg.count);
+
+        for (let i = 0; i < cfg.count; i++) {
+          let best = null;
+          let bestScore = -Infinity;
+          for (let attempt = 0; attempt < 34; attempt++) {
+            const candidate = {
+              x: -0.03 + rng() * 1.06,
+              y: -0.03 + rng() * 1.06
+            };
+            let score = 10;
+            for (const other of shapes) {
+              const dx = candidate.x - other.x;
+              const dy = (candidate.y - other.y) * 1.6;
+              score = Math.min(score, Math.hypot(dx, dy) / (other.radius + base));
+            }
+            score += rng() * 0.08;
+            if (score > bestScore) { best = candidate; bestScore = score; }
+          }
+
+          const longness = 1 + cfg.elongation * (1.05 + rng() * 1.1);
+          const sizeNoise = 0.74 + rng() * 0.55;
+          const a = base * longness * sizeNoise;
+          const b = base * (0.74 + rng() * 0.38) / Math.pow(longness, .34);
+          const flowBias = (-0.22 + (best.y - .5) * .44) * cfg.flow;
+          const scatter = (rng() - .5) * Math.PI * (1 - cfg.flow * .72);
+
+          shapes.push({
+            x: best.x,
+            y: best.y,
+            a,
+            b,
+            radius: Math.sqrt(a * b),
+            angle: flowBias + scatter,
+            phase: rng() * Math.PI * 2,
+            phase2: rng() * Math.PI * 2,
+            depth: .75 + rng() * .38
+          });
+        }
+        return shapes;
+      }
+
+      function smin(a, b, k) {
+        const h = Math.max(k - Math.abs(a - b), 0) / k;
+        return Math.min(a, b) - h * h * k * .25;
+      }
+
+      function buildValleys(shapes, cfg, aspect) {
+        const valleys = [];
+        const linked = new Set();
+        for (let i = 0; i < shapes.length; i++) {
+          const s = shapes[i];
+          const neighbours = [];
+          for (let j = 0; j < shapes.length; j++) {
+            if (j === i) continue;
+            neighbours.push({ j, d: Math.hypot((s.x - shapes[j].x) * aspect, s.y - shapes[j].y) });
+          }
+          neighbours.sort((a, b) => a.d - b.d);
+          for (let n = 0; n < Math.min(2, neighbours.length); n++) {
+            const o = shapes[neighbours[n].j];
+            const key = Math.min(i, neighbours[n].j) + ':' + Math.max(i, neighbours[n].j);
+            if (linked.has(key)) continue;
+            if (neighbours[n].d > (s.radius + o.radius) * (n === 0 ? 2.4 : 1.8)) continue;
+            if (neighbours[n].d > (n === 0 ? .6 : .45)) continue;
+            linked.add(key);
+            const strength = n === 0 ? .62 : .5;
+            const v = {
+              x1: s.x * aspect, y1: s.y,
+              x2: o.x * aspect, y2: o.y,
+              halfWidth: Math.max(.06, Math.min(s.radius, o.radius) * .75) * (1 + neighbours[n].d * .5),
+              depth: cfg.depth * strength * (s.depth + o.depth) * .5
+            };
+            v.ex = v.x2 - v.x1;
+            v.ey = v.y2 - v.y1;
+            v.invLen2 = 1 / Math.max(1e-6, v.ex * v.ex + v.ey * v.ey);
+            valleys.push(v);
+          }
+        }
+        return valleys;
+      }
+
+      function makeRenderContext(cfg, width, height) {
+        const aspect = width / height;
+        const shapes = createShapes(cfg);
+        return {
+          cfg, width, height, aspect, shapes,
+          valleys: buildValleys(shapes, cfg, aspect),
+          k: .15 + cfg.softness * .2,
+          swellAmp: cfg.depth * (.10 + cfg.wave * .40),
+          p1: cfg.seed * .013, p2: cfg.seed * .007, p3: cfg.seed * .019,
+          blurRadius: width * (.006 + cfg.softness * .018)
+        };
+      }
+
+      function computeField(rc, out, outW, px0, py0, px1, py1, tPhase, withSwell) {
+        const { cfg, width, height, aspect, shapes, valleys, k, swellAmp, p1, p2, p3 } = rc;
+        const tau = Math.PI * 2;
+        const useSculpt = sculptActive;
+
+        for (let py = py0; py < py1; py++) {
+          const v0 = py / (height - 1);
+          const row = (py - py0) * outW - px0;
+          for (let px = px0; px < px1; px++) {
+            const u0 = px / (width - 1);
+            let x = u0, y = v0, lift = 0;
+            if (useSculpt) {
+              x += sampleSculpt(sculpt.warpX, u0, v0);
+              y += sampleSculpt(sculpt.warpY, u0, v0);
+              lift = sampleSculpt(sculpt.height, u0, v0);
+            }
+            const globalWarpX = cfg.flow * (.022 * Math.sin(y * tau * 1.45 + cfg.seed * .017) + .009 * Math.sin((x + y) * tau * 2.2));
+            const globalWarpY = cfg.flow * (.016 * Math.sin(x * tau * 1.25 + cfg.seed * .011) - .008 * Math.cos((x - y) * tau * 2.4));
+            const wx = x + globalWarpX;
+            const wy = y + globalWarpY;
+
+            let field = 0;
+            for (let s = 0; s < shapes.length; s++) {
+              const shape = shapes[s];
+              const ca = Math.cos(shape.angle);
+              const sa = Math.sin(shape.angle);
+              const dx = (wx - shape.x) * aspect;
+              const dy = wy - shape.y;
+              const rx = ca * dx + sa * dy;
+              const ry = -sa * dx + ca * dy;
+              const theta = Math.atan2(ry / shape.b, rx / shape.a);
+              const irregular = 1
+                + cfg.irregularity * .095 * Math.sin(theta * 3 + shape.phase)
+                + cfg.irregularity * .05 * Math.sin(theta * 5 + shape.phase2);
+              const r = Math.hypot(rx / shape.a, ry / shape.b) * irregular;
+              const inner = 1 - smoothstep(.45, 1.0, r);
+              const bowl = -cfg.depth * shape.depth * (inner * .85 + inner * inner * .15);
+              field = smin(field, bowl, k);
+            }
+
+            const qx = wx * aspect + cfg.flow * .045 * Math.sin(wy * tau * 2.1 + p2);
+            const qy = wy + cfg.flow * .04 * Math.sin(wx * aspect * tau * 1.3 + p1);
+            for (let v = 0; v < valleys.length; v++) {
+              const valley = valleys[v];
+              const t = clamp(((qx - valley.x1) * valley.ex + (qy - valley.y1) * valley.ey) * valley.invLen2, 0, 1);
+              const dist = Math.hypot(qx - valley.x1 - valley.ex * t, qy - valley.y1 - valley.ey * t);
+              const prof = 1 - smoothstep(0, valley.halfWidth, dist);
+              field = smin(field, -valley.depth * prof, k);
+            }
+
+            let swell = 0;
+            if (withSwell) {
+              swell = swellAmp * (
+                .5 * Math.sin((x * .8 + y * .55) * tau * 1.15 + p1 + tPhase) +
+                .32 * Math.sin((x * .45 - y * 1.05) * tau * 1.35 + p2 + tPhase * .7) +
+                .18 * Math.sin((x * 1.5 + y * 1.3) * tau * .8 + p3 + tPhase * 1.35)
+              );
+            }
+            out[row + px] = swell + field + lift;
+          }
+        }
+      }
+
+      function blurHeightMap(map, width, height, radius) {
+        const kernelRadius = Math.max(1, Math.round(radius));
+        const sigma = Math.max(1, radius / 2);
+        const kernel = new Float32Array(kernelRadius * 2 + 1);
+        let total = 0;
+        for (let i = -kernelRadius; i <= kernelRadius; i++) {
+          const w = Math.exp(-(i * i) / (2 * sigma * sigma));
+          kernel[i + kernelRadius] = w;
+          total += w;
+        }
+        for (let i = 0; i < kernel.length; i++) kernel[i] /= total;
+
+        const tmp = new Float32Array(map.length);
+        for (let y = 0; y < height; y++) {
+          const row = y * width;
+          for (let x = 0; x < width; x++) {
+            let acc = 0;
+            for (let t = -kernelRadius; t <= kernelRadius; t++) {
+              acc += map[row + clamp(x + t, 0, width - 1)] * kernel[t + kernelRadius];
+            }
+            tmp[row + x] = acc;
+          }
+        }
+        for (let x = 0; x < width; x++) {
+          for (let y = 0; y < height; y++) {
+            let acc = 0;
+            for (let t = -kernelRadius; t <= kernelRadius; t++) {
+              acc += tmp[clamp(y + t, 0, height - 1) * width + x] * kernel[t + kernelRadius];
+            }
+            map[y * width + x] = acc;
+          }
+        }
+      }
+
+      function drawPanelLines(ctx, width, height, layout) {
+        if (layout === 'none') return;
+        ctx.save();
+        ctx.lineWidth = Math.max(1, width / 1400);
+        ctx.strokeStyle = 'rgba(34, 31, 27, .34)';
+        ctx.shadowColor = 'rgba(255, 255, 255, .22)';
+        ctx.shadowBlur = Math.max(1, width / 900);
+        const columns = layout === '3x2' ? 3 : 2;
+        const rows = layout === '2x1' ? 1 : 2;
+        for (let col = 1; col < columns; col++) {
+          const x = Math.round(width * col / columns) + .5;
+          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
+        }
+        for (let row = 1; row < rows; row++) {
+          const y = Math.round(height * row / rows) + .5;
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function drawFrame(ctx, width, height, enabled) {
+        if (!enabled) return;
+        const frameWidth = Math.max(4, Math.round(width * .009));
+        ctx.save();
+        ctx.strokeStyle = '#151513';
+        ctx.lineWidth = frameWidth;
+        ctx.strokeRect(frameWidth / 2, frameWidth / 2, width - frameWidth, height - frameWidth);
+        ctx.restore();
+      }
+
+      function shadeParams(cfg, width) {
+        const azimuth = cfg.lightAngle * Math.PI / 180;
+        const elevation = cfg.lightHeight * Math.PI / 180;
+        const color = hexToRgb(cfg.materialColor);
+        return {
+          lx: Math.cos(azimuth) * Math.cos(elevation),
+          ly: Math.sin(azimuth) * Math.cos(elevation),
+          lz: Math.sin(elevation),
+          normalScale: (18 + cfg.depth * 14) * (width / 900),
+          ambient: .40 - cfg.contrast * .10,
+          diffuseGain: .66 + cfg.contrast * .20,
+          depthShadow: .30 + cfg.contrast * .20,
+          concaveShadow: .10 + cfg.contrast * .08,
+          lapScale: width * width * .0032,
+          depthRange: Math.max(.05, cfg.depth * .85),
+          color,
+          shadowR: color[0] * .40 + 15,
+          shadowG: color[1] * .39 + 14,
+          shadowB: color[2] * .38 + 13,
+          texture: cfg.texture,
+          seed: cfg.seed
+        };
+      }
+
+      function shadeRegion(data, map, mapW, mapH, ix0, iy0, ix1, iy1, gx0, gy0, fullW, fullH, sp, mean) {
+        const outW = ix1 - ix0;
+        for (let y = iy0; y < iy1; y++) {
+          const yu = Math.max(0, y - 1);
+          const yd = Math.min(mapH - 1, y + 1);
+          const gy = gy0 + (y - iy0);
+          for (let x = ix0; x < ix1; x++) {
+            const xl = Math.max(0, x - 1);
+            const xr = Math.min(mapW - 1, x + 1);
+            const gx = gx0 + (x - ix0);
+            const i = y * mapW + x;
+            const hl = map[y * mapW + xl], hr = map[y * mapW + xr];
+            const hu = map[yu * mapW + x], hd = map[yd * mapW + x];
+            const dx = (hr - hl) * sp.normalScale;
+            const dy = (hd - hu) * sp.normalScale;
+            const inv = 1 / Math.hypot(dx, dy, 1);
+            const nx = -dx * inv, ny = -dy * inv, nz = inv;
+            const diffuse = Math.max(0, (nx * sp.lx + ny * sp.ly + nz * sp.lz + .3) / 1.3);
+            const concavity = clamp((hl + hr + hu + hd - 4 * map[i]) * sp.lapScale, 0, 1);
+            const depthBelow = clamp((mean - map[i]) / sp.depthRange, 0, 1);
+            const occlusion = 1 - Math.min(.6, depthBelow * sp.depthShadow + concavity * sp.concaveShadow);
+            const light = clamp((sp.ambient + diffuse * sp.diffuseGain) * occlusion, .14, 1.08);
+
+            let h1 = Math.imul(gx + 17, 374761393) + Math.imul(gy + 31, 668265263) + Math.imul(sp.seed, 69069);
+            h1 = Math.imul(h1 ^ h1 >>> 13, 1274126177);
+            const fine = ((h1 ^ h1 >>> 16) >>> 0) / 4294967295 - .5;
+            let h2 = Math.imul((gx >> 2) + 113, 374761393) + Math.imul((gy >> 2) + 57, 668265263) + Math.imul(sp.seed, 362437);
+            h2 = Math.imul(h2 ^ h2 >>> 13, 1274126177);
+            const coarse = ((h2 ^ h2 >>> 16) >>> 0) / 4294967295 - .5;
+            const grain = (fine * 5.4 + coarse * 3.6) * sp.texture;
+
+            const vignette = 1 - .055 * Math.pow(Math.hypot(gx / fullW - .5, gy / fullH - .5) / .71, 1.8);
+            const p = ((y - iy0) * outW + (x - ix0)) * 4;
+            data[p] = clamp((sp.shadowR + (sp.color[0] - sp.shadowR) * light) * vignette + grain, 0, 255);
+            data[p + 1] = clamp((sp.shadowG + (sp.color[1] - sp.shadowG) * light) * vignette + grain, 0, 255);
+            data[p + 2] = clamp((sp.shadowB + (sp.color[2] - sp.shadowB) * light) * vignette + grain, 0, 255);
+            data[p + 3] = 255;
+          }
+        }
+      }
+
+      function renderRelief(target, width, height, cfg) {
+        target.width = width;
+        target.height = height;
+        const ctx = target.getContext('2d', { alpha: false });
+        const rc = makeRenderContext(cfg, width, height);
+        const map = new Float32Array(width * height);
+        computeField(rc, map, width, 0, 0, width, height, 0, true);
+        blurHeightMap(map, width, height, rc.blurRadius);
+
+        let mean = 0;
+        for (let i = 0; i < map.length; i++) mean += map[i];
+        mean /= map.length;
+
+        const sp = shadeParams(cfg, width);
+        const image = ctx.createImageData(width, height);
+        shadeRegion(image.data, map, width, height, 0, 0, width, height, 0, 0, width, height, sp, mean);
+        ctx.putImageData(image, 0, 0);
+        drawPanelLines(ctx, width, height, cfg.panelLayout);
+        drawFrame(ctx, width, height, cfg.frame);
+        return { rc, mean, sp };
+      }
+
+      // Pendant le trait : re-rendu basse résolution limité à la zone touchée.
+      const patchCanvas = document.createElement('canvas');
+
+      function renderSculptPatch(b) {
+        if (!lastFull) return;
+        const cfg = lastFull.rc.cfg;
+        const W = lastFull.rc.width, H = lastFull.rc.height;
+        const lowW = Math.max(4, Math.round(W * .5));
+        const lowH = Math.max(4, Math.round(lowW / 1.6));
+        if (!lastFull.lowRc || lastFull.lowRc.width !== lowW) {
+          lastFull.lowRc = makeRenderContext(cfg, lowW, lowH);
+          lastFull.lowSp = shadeParams(cfg, lowW);
+        }
+        const rc = lastFull.lowRc;
+        const fx = lowW / W, fy = lowH / H;
+        const lx0 = clamp(Math.floor(b.x0 * fx), 0, lowW);
+        const ly0 = clamp(Math.floor(b.y0 * fy), 0, lowH);
+        const lx1 = clamp(Math.ceil(b.x1 * fx), 0, lowW);
+        const ly1 = clamp(Math.ceil(b.y1 * fy), 0, lowH);
+        if (lx1 <= lx0 || ly1 <= ly0) return;
+        const K = Math.max(1, Math.round(rc.blurRadius)) + 1;
+        const ex0 = Math.max(0, lx0 - K), ey0 = Math.max(0, ly0 - K);
+        const ex1 = Math.min(lowW, lx1 + K), ey1 = Math.min(lowH, ly1 + K);
+        const ew = ex1 - ex0, eh = ey1 - ey0;
+        const local = new Float32Array(ew * eh);
+        computeField(rc, local, ew, ex0, ey0, ex1, ey1, 0, true);
+        blurHeightMap(local, ew, eh, rc.blurRadius);
+        const pw = lx1 - lx0, ph = ly1 - ly0;
+        patchCanvas.width = pw;
+        patchCanvas.height = ph;
+        const pctx = patchCanvas.getContext('2d', { alpha: false });
+        const image = pctx.createImageData(pw, ph);
+        shadeRegion(image.data, local, ew, eh, lx0 - ex0, ly0 - ey0, lx1 - ex0, ly1 - ey0, lx0, ly0, lowW, lowH, lastFull.lowSp, lastFull.mean);
+        pctx.putImageData(image, 0, 0);
+        const ctx = canvas.getContext('2d');
+        const dx0 = lx0 / fx, dy0 = ly0 / fy, dw = pw / fx, dh = ph / fy;
+        ctx.imageSmoothingEnabled = true;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(dx0, dy0, dw, dh);
+        ctx.clip();
+        ctx.drawImage(patchCanvas, 0, 0, pw, ph, dx0, dy0, dw, dh);
+        drawPanelLines(ctx, W, H, cfg.panelLayout);
+        drawFrame(ctx, W, H, cfg.frame);
+        ctx.restore();
+      }
+
+      // Aperçu rapide pendant le glisser-lumière (rendu complet au relâché).
+      const previewCanvas = document.createElement('canvas');
+
+      function renderLowPreview() {
+        const cfg = readConfig();
+        updateVisualEnvironment(cfg);
+        renderRelief(previewCanvas, 460, 288, cfg);
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(previewCanvas, 0, 0, canvas.width, canvas.height);
+      }
+
+      function updateVisualEnvironment(cfg) {
+        stage.style.setProperty('--wall', cfg.wallColor);
+        artWrap.style.setProperty('--glow-alpha', (.06 + cfg.backlight * .76).toFixed(2));
+        seedLabel.textContent = seed;
+        designName.textContent = currentName;
+      }
+
+      function updateControlDisplays() {
+        const formats = {
+          count: v => v,
+          scale: v => v + ' %',
+          elongation: v => v + ' %',
+          flow: v => v + ' %',
+          irregularity: v => v + ' %',
+          depth: v => v + ' %',
+          softness: v => v + ' %',
+          wave: v => v + ' %',
+          texture: v => v + ' %',
+          lightAngle: v => v + '°',
+          lightHeight: v => v + '°',
+          contrast: v => v + ' %',
+          backlight: v => v + ' %'
+        };
+        Object.entries(formats).forEach(([id, format]) => {
+          const input = controls[id];
+          const output = document.getElementById(id + 'Value');
+          output.value = format(input.value);
+          const min = +input.min, max = +input.max, value = +input.value;
+          input.style.setProperty('--range', ((value - min) / (max - min) * 100).toFixed(2) + '%');
+        });
+      }
+
+      function markCustom() {
+        currentName = 'Création libre';
+        document.querySelectorAll('.preset').forEach(button => button.classList.remove('active'));
+      }
+
+      function scheduleRender(custom = true) {
+        if (custom) markCustom();
+        updateControlDisplays();
+        const cfg = readConfig();
+        updateVisualEnvironment(cfg);
+        const token = ++renderToken;
+        rendering.classList.add('show');
+        requestAnimationFrame(() => {
+          if (token !== renderToken) return;
+          requestAnimationFrame(() => {
+            if (token !== renderToken) return;
+            const rect = artWrap.getBoundingClientRect();
+            const dpr = Math.min(window.devicePixelRatio || 1, 1.45);
+            const width = Math.round(clamp(rect.width * dpr, 560, 1020));
+            const height = Math.round(width / 1.6);
+            lastFull = renderRelief(canvas, width, height, cfg);
+            rendering.classList.remove('show');
+            saveState();
+            if (animEnabled) restartAnim();
+          });
+        });
+      }
+
+      function applyPreset(key) {
+        const preset = presets[key];
+        seed = preset.seed;
+        currentName = preset.name;
+        Object.entries(preset).forEach(([id, value]) => {
+          if (!controls[id]) return;
+          if (controls[id].type === 'checkbox') controls[id].checked = value;
+          else controls[id].value = value;
+        });
+        document.querySelectorAll('.preset').forEach(button => button.classList.toggle('active', button.dataset.preset === key));
+        scheduleRender(false);
+      }
+
+      function randomize() {
+        seed = Math.floor(1000 + Math.random() * 8999);
+        currentName = 'Variation ' + seed;
+        document.querySelectorAll('.preset').forEach(button => button.classList.remove('active'));
+        scheduleRender(false);
+      }
+
+      function saveState() {
+        try {
+          const state = { seed, name: currentName };
+          controlIds.forEach(id => {
+            state[id] = controls[id].type === 'checkbox' ? controls[id].checked : controls[id].value;
+          });
+          localStorage.setItem('relief-lab-state-v2', JSON.stringify(state));
+        } catch (_) { /* stockage facultatif */ }
+      }
+
+      function restoreState() {
+        try {
+          const raw = localStorage.getItem('relief-lab-state-v2');
+          if (!raw) return false;
+          const state = JSON.parse(raw);
+          if (!state || typeof state !== 'object') return false;
+          seed = +state.seed || presets.dunes.seed;
+          currentName = state.name || 'Création libre';
+          controlIds.forEach(id => {
+            if (!(id in state)) return;
+            if (controls[id].type === 'checkbox') controls[id].checked = !!state[id];
+            else controls[id].value = state[id];
+          });
+          document.querySelectorAll('.preset').forEach(button => button.classList.remove('active'));
+          return true;
+        } catch (_) { return false; }
+      }
+
+      function exportPng(button) {
+        const original = button.innerHTML;
+        button.disabled = true;
+        button.innerHTML = '<span class="btn-icon">···</span> Calcul HD';
+        rendering.classList.add('show');
+        setTimeout(() => {
+          const output = document.createElement('canvas');
+          renderRelief(output, 1920, 1200, readConfig());
+          output.toBlob(blob => {
+            if (blob) {
+              const link = document.createElement('a');
+              link.href = URL.createObjectURL(blob);
+              link.download = 'relief-organique-' + seed + '.png';
+              link.click();
+              setTimeout(() => URL.revokeObjectURL(link.href), 1200);
+            }
+            button.disabled = false;
+            button.innerHTML = original;
+            rendering.classList.remove('show');
+          }, 'image/png');
+        }, 50);
+      }
+
+      // ---- Outils de sculpture ----
+      const brushSize = document.getElementById('brushSize');
+      const brushStrength = document.getElementById('brushStrength');
+      const undoBtn = document.getElementById('undoBtn');
+      const redoBtn = document.getElementById('redoBtn');
+      const hintText = document.getElementById('hintText');
+      const hintSymbol = document.getElementById('hintSymbol');
+
+      const TOOL_META = {
+        light: { icon: '☀', hint: 'Glissez sur l’œuvre pour déplacer la lumière' },
+        warp: { icon: '〰', hint: 'Poussez le motif dans le sens du geste' },
+        dig: { icon: '◡', hint: 'Glissez pour creuser la matière — la pression du stylet module la force' },
+        raise: { icon: '◠', hint: 'Glissez pour bomber la matière — la pression du stylet module la force' },
+        smooth: { icon: '≋', hint: 'Glissez pour adoucir la sculpture' },
+        erase: { icon: '⌫', hint: 'Glissez pour retrouver le motif d’origine' }
+      };
+
+      function smoothCell(field, i, f) {
+        const x = i % SW, y = (i / SW) | 0;
+        const xl = Math.max(0, x - 1), xr = Math.min(SW - 1, x + 1);
+        const yu = Math.max(0, y - 1), yd = Math.min(SH - 1, y + 1);
+        const avg = (field[y * SW + xl] + field[y * SW + xr] + field[yu * SW + x] + field[yd * SW + x]) * .25;
+        field[i] += (avg - field[i]) * f;
+      }
+
+      function stampBrush(u, v, du, dv, press, first) {
+        const radius = +brushSize.value / 100;
+        const strength = (+brushStrength.value / 100) * press;
+        const dist = Math.hypot(du, dv);
+        const dose = Math.min(.12, dist * 8 + (first ? .02 : 0));
+        if (activeTool !== 'warp' && dose === 0) return;
+        const gx0 = Math.max(0, Math.floor((u - radius) * (SW - 1)));
+        const gx1 = Math.min(SW - 1, Math.ceil((u + radius) * (SW - 1)));
+        const ry = radius * 1.6;
+        const gy0 = Math.max(0, Math.floor((v - ry) * (SH - 1)));
+        const gy1 = Math.min(SH - 1, Math.ceil((v + ry) * (SH - 1)));
+        const r2 = radius * radius;
+        for (let gy = gy0; gy <= gy1; gy++) {
+          const dy = (gy / (SH - 1) - v) / 1.6;
+          for (let gx = gx0; gx <= gx1; gx++) {
+            const dx = gx / (SW - 1) - u;
+            const q = (dx * dx + dy * dy) / r2;
+            if (q >= 1) continue;
+            const fall = (1 - q) * (1 - q);
+            const i = gy * SW + gx;
+            if (activeTool === 'warp') {
+              sculpt.warpX[i] = clamp(sculpt.warpX[i] - du * strength * 1.5 * fall, -.22, .22);
+              sculpt.warpY[i] = clamp(sculpt.warpY[i] - dv * strength * 1.5 * fall, -.22, .22);
+            } else if (activeTool === 'dig') {
+              sculpt.height[i] = clamp(sculpt.height[i] - strength * dose * 1.6 * fall, -1.4, 1.2);
+            } else if (activeTool === 'raise') {
+              sculpt.height[i] = clamp(sculpt.height[i] + strength * dose * 1.6 * fall, -1.4, 1.2);
+            } else if (activeTool === 'smooth') {
+              const f = Math.min(1, strength * dose * 7 * fall);
+              smoothCell(sculpt.warpX, i, f);
+              smoothCell(sculpt.warpY, i, f);
+              smoothCell(sculpt.height, i, f);
+            } else if (activeTool === 'erase') {
+              const f = 1 - Math.min(.9, strength * dose * 6 * fall);
+              sculpt.warpX[i] *= f;
+              sculpt.warpY[i] *= f;
+              sculpt.height[i] *= f;
+            }
+          }
+        }
+        if (activeTool !== 'erase') sculptActive = true;
+      }
+
+      // ---- Annuler / Rétablir ----
+      function snapshotSculpt() {
+        return { wx: sculpt.warpX.slice(), wy: sculpt.warpY.slice(), h: sculpt.height.slice(), active: sculptActive };
+      }
+      function applySnapshot(s) {
+        sculpt.warpX.set(s.wx);
+        sculpt.warpY.set(s.wy);
+        sculpt.height.set(s.h);
+        sculptActive = s.active;
+      }
+      function refreshHistoryButtons() {
+        undoBtn.disabled = !undoStack.length;
+        redoBtn.disabled = !redoStack.length;
+      }
+      function pushUndo() {
+        undoStack.push(snapshotSculpt());
+        if (undoStack.length > 15) undoStack.shift();
+        redoStack.length = 0;
+        refreshHistoryButtons();
+      }
+      function undo() {
+        if (!undoStack.length) return;
+        redoStack.push(snapshotSculpt());
+        applySnapshot(undoStack.pop());
+        refreshHistoryButtons();
+        scheduleRender(false);
+        saveSculptDebounced();
+      }
+      function redo() {
+        if (!redoStack.length) return;
+        undoStack.push(snapshotSculpt());
+        applySnapshot(redoStack.pop());
+        refreshHistoryButtons();
+        scheduleRender(false);
+        saveSculptDebounced();
+      }
+
+      // ---- Persistance de la sculpture (Int16 quantifié + base64) ----
+      let saveSculptTimer = 0;
+      function saveSculptDebounced() {
+        clearTimeout(saveSculptTimer);
+        saveSculptTimer = setTimeout(saveSculpt, 400);
+      }
+      function saveSculpt() {
+        try {
+          if (!sculptActive) { localStorage.removeItem('relief-lab-sculpt'); return; }
+          const n = SW * SH;
+          const packed = new Int16Array(n * 3);
+          for (let i = 0; i < n; i++) {
+            packed[i] = Math.round(clamp(sculpt.warpX[i], -.25, .25) * 120000);
+            packed[n + i] = Math.round(clamp(sculpt.warpY[i], -.25, .25) * 120000);
+            packed[n * 2 + i] = Math.round(clamp(sculpt.height[i], -1.5, 1.5) * 20000);
+          }
+          const bytes = new Uint8Array(packed.buffer);
+          let bin = '';
+          for (let i = 0; i < bytes.length; i += 8192) {
+            bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+          }
+          localStorage.setItem('relief-lab-sculpt', btoa(bin));
+        } catch (_) { /* stockage facultatif */ }
+      }
+      function restoreSculpt() {
+        try {
+          const raw = localStorage.getItem('relief-lab-sculpt');
+          if (!raw) return;
+          const bin = atob(raw);
+          if (bin.length !== SW * SH * 3 * 2) return;
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          const packed = new Int16Array(bytes.buffer);
+          const n = SW * SH;
+          for (let i = 0; i < n; i++) {
+            sculpt.warpX[i] = packed[i] / 120000;
+            sculpt.warpY[i] = packed[n + i] / 120000;
+            sculpt.height[i] = packed[n * 2 + i] / 20000;
+          }
+          sculptActive = true;
+        } catch (_) { /* stockage facultatif */ }
+      }
+
+      // ---- Trait en cours ----
+      let stroke = null;
+      let strokeDirty = null;
+      let strokePatchQueued = false;
+      let lightDragId = null;
+      let lightBusy = false;
+      const activePointers = new Set();
+
+      function canvasPos(ev) {
+        const rect = artWrap.getBoundingClientRect();
+        return { u: (ev.clientX - rect.left) / rect.width, v: (ev.clientY - rect.top) / rect.height };
+      }
+
+      function growDirty(u, v) {
+        if (!lastFull) return;
+        const W = lastFull.rc.width, H = lastFull.rc.height;
+        const r = (+brushSize.value / 100) * W + lastFull.rc.blurRadius * 2 + 6;
+        const cx = u * W, cy = v * H;
+        if (!strokeDirty) strokeDirty = { x0: cx - r, y0: cy - r, x1: cx + r, y1: cy + r };
+        else {
+          strokeDirty.x0 = Math.min(strokeDirty.x0, cx - r);
+          strokeDirty.y0 = Math.min(strokeDirty.y0, cy - r);
+          strokeDirty.x1 = Math.max(strokeDirty.x1, cx + r);
+          strokeDirty.y1 = Math.max(strokeDirty.y1, cy + r);
+        }
+      }
+
+      function queuePatch() {
+        if (strokePatchQueued) return;
+        strokePatchQueued = true;
+        requestAnimationFrame(() => {
+          strokePatchQueued = false;
+          if (!strokeDirty) return;
+          const b = strokeDirty;
+          strokeDirty = null;
+          renderSculptPatch(b);
+        });
+      }
+
+      function applyStrokePoints(e, first) {
+        const events = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+        for (const ev of events) {
+          const { u, v } = canvasPos(ev);
+          const press = ev.pressure > 0 ? ev.pressure : .55;
+          const du = first ? 0 : u - stroke.lastU;
+          const dv = first ? 0 : v - stroke.lastV;
+          stampBrush(u, v, du, dv, press, first);
+          growDirty(u, v);
+          stroke.lastU = u;
+          stroke.lastV = v;
+          first = false;
+        }
+        queuePatch();
+      }
+
+      function endStroke() {
+        if (!stroke) return;
+        stroke = null;
+        strokeDirty = null;
+        scheduleRender(false);
+        saveSculptDebounced();
+      }
+
+      function lightMove(event) {
+        const rect = artWrap.getBoundingClientRect();
+        const x = event.clientX - rect.left - rect.width / 2;
+        const y = event.clientY - rect.top - rect.height / 2;
+        let angle = Math.atan2(y, x) * 180 / Math.PI;
+        if (angle < 0) angle += 360;
+        controls.lightAngle.value = Math.round(angle);
+        markCustom();
+        updateControlDisplays();
+        if (!lightBusy) {
+          lightBusy = true;
+          requestAnimationFrame(() => { renderLowPreview(); lightBusy = false; });
+        }
+      }
+
+      // ---- Ondulation animée ----
+      let animEnabled = false;
+      let animState = null;
+      let animQuality = .5;
+      let animRaf = 0;
+      let animLastTs = 0;
+      let animAvg = 0;
+
+      function restartAnim() {
+        if (!animEnabled) return;
+        buildAnimContext();
+        if (!animRaf) animRaf = requestAnimationFrame(animFrame);
+      }
+      function stopAnim() {
+        if (animRaf) cancelAnimationFrame(animRaf);
+        animRaf = 0;
+        animState = null;
+        animAvg = 0;
+        if (lastFull) scheduleRender(false);
+      }
+      function buildAnimContext() {
+        const cfg = readConfig();
+        const baseW = canvas.width || 900;
+        const aw = Math.max(180, Math.round(baseW * animQuality));
+        const ah = Math.max(112, Math.round(aw / 1.6));
+        const rc = makeRenderContext(cfg, aw, ah);
+        const size = aw * ah;
+        const staticMap = new Float32Array(size);
+        computeField(rc, staticMap, aw, 0, 0, aw, ah, 0, false);
+        blurHeightMap(staticMap, aw, ah, rc.blurRadius);
+        let mean = 0;
+        for (let i = 0; i < size; i++) mean += staticMap[i];
+        mean /= size;
+        const sxA = new Float32Array(size);
+        const syA = new Float32Array(size);
+        for (let py = 0; py < ah; py++) {
+          const v0 = py / (ah - 1);
+          for (let px = 0; px < aw; px++) {
+            const u0 = px / (aw - 1);
+            const i = py * aw + px;
+            sxA[i] = u0 + (sculptActive ? sampleSculpt(sculpt.warpX, u0, v0) : 0);
+            syA[i] = v0 + (sculptActive ? sampleSculpt(sculpt.warpY, u0, v0) : 0);
+          }
+        }
+        const off = animState && animState.off ? animState.off : document.createElement('canvas');
+        off.width = aw;
+        off.height = ah;
+        const offCtx = off.getContext('2d', { alpha: false });
+        animState = { rc, staticMap, sxA, syA, hbuf: new Float32Array(size), image: offCtx.createImageData(aw, ah), off, offCtx, sp: shadeParams(cfg, aw), mean };
+      }
+      function animFrame(ts) {
+        animRaf = requestAnimationFrame(animFrame);
+        if (!animEnabled || !animState || document.hidden || stroke || lightDragId !== null) return;
+        if (ts - animLastTs < 33) return;
+        animLastTs = ts;
+        const t0 = performance.now();
+        drawAnimFrame(ts * .00045);
+        const dt = performance.now() - t0;
+        animAvg = animAvg ? animAvg * .8 + dt * .2 : dt;
+        if (animAvg > 30 && animQuality > .25) {
+          animQuality = Math.max(.25, animQuality * .72);
+          animAvg = 0;
+          buildAnimContext();
+        }
+      }
+      function drawAnimFrame(phase) {
+        const { rc, staticMap, sxA, syA, hbuf, image, off, offCtx, sp, mean } = animState;
+        const { swellAmp, p1, p2, p3 } = rc;
+        const tau = Math.PI * 2;
+        for (let i = 0; i < hbuf.length; i++) {
+          const sx = sxA[i], sy = syA[i];
+          hbuf[i] = staticMap[i] + swellAmp * (
+            .5 * Math.sin((sx * .8 + sy * .55) * tau * 1.15 + p1 + phase) +
+            .32 * Math.sin((sx * .45 - sy * 1.05) * tau * 1.35 + p2 + phase * .7) +
+            .18 * Math.sin((sx * 1.5 + sy * 1.3) * tau * .8 + p3 + phase * 1.35)
+          );
+        }
+        shadeRegion(image.data, hbuf, off.width, off.height, 0, 0, off.width, off.height, 0, 0, off.width, off.height, sp, mean);
+        offCtx.putImageData(image, 0, 0);
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(off, 0, 0, canvas.width, canvas.height);
+        drawPanelLines(ctx, canvas.width, canvas.height, rc.cfg.panelLayout);
+        drawFrame(ctx, canvas.width, canvas.height, rc.cfg.frame);
+      }
+
+      controlIds.forEach(id => {
+        const control = controls[id];
+        const eventName = control.matches('select, input[type="checkbox"], input[type="color"]') ? 'change' : 'input';
+        control.addEventListener(eventName, () => scheduleRender(true));
+      });
+
+      document.querySelectorAll('.preset').forEach(button => button.addEventListener('click', () => applyPreset(button.dataset.preset)));
+      document.getElementById('randomizeTop').addEventListener('click', randomize);
+      document.getElementById('randomizeMobile').addEventListener('click', randomize);
+      document.getElementById('exportTop').addEventListener('click', event => exportPng(event.currentTarget));
+      document.getElementById('exportMobile').addEventListener('click', event => exportPng(event.currentTarget));
+
+      artWrap.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        activePointers.add(e.pointerId);
+        if (activePointers.size > 1) { endStroke(); lightDragId = null; return; }   // 2 doigts : ignoré
+        artWrap.setPointerCapture(e.pointerId);
+        if (activeTool === 'light') { lightDragId = e.pointerId; lightMove(e); return; }
+        pushUndo();
+        const { u, v } = canvasPos(e);
+        stroke = { id: e.pointerId, lastU: u, lastV: v };
+        applyStrokePoints(e, true);
+      });
+
+      artWrap.addEventListener('pointermove', e => {
+        if (stroke && e.pointerId === stroke.id && activePointers.size === 1) {
+          e.preventDefault();
+          applyStrokePoints(e, false);
+        } else if (lightDragId === e.pointerId) {
+          e.preventDefault();
+          lightMove(e);
+        }
+      });
+
+      function releasePointer(e) {
+        activePointers.delete(e.pointerId);
+        if (stroke && e.pointerId === stroke.id) endStroke();
+        if (lightDragId === e.pointerId) { lightDragId = null; scheduleRender(true); }
+      }
+      artWrap.addEventListener('pointerup', releasePointer);
+      artWrap.addEventListener('pointercancel', releasePointer);
+
+      document.querySelectorAll('.tool[data-tool]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          activeTool = btn.dataset.tool;
+          document.querySelectorAll('.tool[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === activeTool));
+          hintSymbol.textContent = TOOL_META[activeTool].icon;
+          hintText.textContent = TOOL_META[activeTool].hint;
+        });
+      });
+
+      undoBtn.addEventListener('click', undo);
+      redoBtn.addEventListener('click', redo);
+      window.addEventListener('keydown', e => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+        else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
+      });
+
+      document.getElementById('clearSculpt').addEventListener('click', () => {
+        pushUndo();
+        sculpt.warpX.fill(0);
+        sculpt.warpY.fill(0);
+        sculpt.height.fill(0);
+        sculptActive = false;
+        scheduleRender(false);
+        saveSculptDebounced();
+      });
+
+      document.getElementById('animate').addEventListener('change', e => {
+        animEnabled = e.target.checked;
+        animEnabled ? restartAnim() : stopAnim();
+      });
+
+      ['brushSize', 'brushStrength'].forEach(id => {
+        const el = document.getElementById(id);
+        const sync = () => el.style.setProperty('--range', ((el.value - el.min) / (el.max - el.min) * 100).toFixed(2) + '%');
+        el.addEventListener('input', sync);
+        sync();
+      });
+
+      const sidebar = document.getElementById('sidebar');
+      const backdrop = document.getElementById('backdrop');
+      const drawerToggle = document.getElementById('drawerToggle');
+      function setDrawer(open) {
+        sidebar.classList.toggle('open', open);
+        backdrop.classList.toggle('show', open);
+        drawerToggle.setAttribute('aria-expanded', open);
+      }
+      drawerToggle.addEventListener('click', () => setDrawer(!sidebar.classList.contains('open')));
+      backdrop.addEventListener('click', () => setDrawer(false));
+
+      let resizeTimer;
+      new ResizeObserver(() => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => scheduleRender(false), 120);
+      }).observe(artWrap);
+
+      restoreState();
+      restoreSculpt();
+      updateControlDisplays();
+      scheduleRender(false);
+    })();
+  </script>
+</body>
+</html>
