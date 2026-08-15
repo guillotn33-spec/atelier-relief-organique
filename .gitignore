@@ -3,3 +3,8 @@ dist/
 *.log
 .DS_Store
 Thumbs.db
+
+# Windows traite "nul" comme un peripherique : un --outfile=/dev/null y depose
+# un fichier reel. Il ne doit jamais entrer dans le depot.
+nul
+nul.*

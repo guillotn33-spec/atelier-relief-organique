@@ -159,6 +159,17 @@ export function defaultUi() {
     animate: false,
     presetKey: 'dunes',
     designName: 'Dunes',
+
+    // Verrou du rapport largeur/hauteur (§3). Le carré et le rond l'imposent
+    // par définition ; ce réglage ne concerne donc que le rectangle.
+    ratioLocked: false,
+    // Vue : zoom et déplacement. Aucune incidence sur les dimensions physiques.
+    viewport: { zoom: 1, panX: 0, panY: 0 },
+    // Position mémorisée des barres (§14, §15).
+    docks: {
+      toolbar: { mode: 'snap', edge: 'canvas-bottom', x: 0, y: 0, collapsed: false, visible: true },
+      mini: { mode: 'float', edge: 'screen-left', x: 24, y: 160, collapsed: false, visible: false },
+    },
   };
 }
 

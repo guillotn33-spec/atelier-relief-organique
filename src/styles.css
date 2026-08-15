@@ -163,7 +163,9 @@ canvas { display: block; width: 100%; height: 100%; }
 .hint { display: flex; align-items: center; gap: 8px; }
 .hint-symbol { color: var(--accent); font-size: 17px; }
 
-.toolbar { position: absolute; z-index: 4; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; max-width: calc(100% - 24px); overflow-x: auto; padding: 7px; border-radius: 16px; border: 1px solid rgba(255, 255, 255, .14); background: rgba(20, 20, 18, .84); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); scrollbar-width: none; touch-action: pan-x; }
+/* La barre est désormais posée par le gestionnaire d'ancrage : ni `left: 50%`
+   ni `transform`, qui entreraient en conflit avec le glisser. */
+.toolbar { display: flex; align-items: center; gap: 4px; max-width: calc(100vw - 24px); overflow-x: auto; padding: 7px; border-radius: 16px; border: 1px solid rgba(255, 255, 255, .14); background: rgba(20, 20, 18, .84); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); scrollbar-width: none; touch-action: pan-x; }
 .toolbar::-webkit-scrollbar { display: none; }
 
 .tool { min-width: 48px; min-height: 48px; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 4px 7px; border: 1px solid transparent; border-radius: 12px; background: transparent; color: #cfccc4; font-size: 10px; cursor: pointer; flex: 0 0 auto; touch-action: manipulation; }
@@ -179,6 +181,96 @@ canvas { display: block; width: 100%; height: 100%; }
 .backdrop { position: fixed; inset: 0; z-index: 39; background: rgba(10, 10, 9, .52); opacity: 0; pointer-events: none; transition: opacity .22s ease; }
 .backdrop.show { opacity: 1; pointer-events: auto; }
 .mobile-actions { display: none; }
+
+/* ---- Vue : zoom et déplacement (§11) ---- */
+/* La transformation porte sur l'œuvre elle-même, donc `getBoundingClientRect`
+   renvoie la boîte déjà transformée et la conversion pointeur → cm est
+   inchangée. `--zoom` sert aux commandes qui ne doivent PAS grossir. */
+.art-wrap { transform-origin: 50% 50%; will-change: transform; }
+
+/* ---- Poignée de redimensionnement physique (§3) ---- */
+
+.resize-handle, .ratio-lock {
+  position: absolute;
+  z-index: 5;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,.5);
+  background: rgba(20,20,18,.82);
+  color: #f4f0e8;
+  cursor: pointer;
+  touch-action: none;
+  /* Cible tactile de 44 px conservée quel que soit le zoom. */
+  width: 44px; height: 44px;
+  transform: scale(calc(1 / var(--zoom, 1)));
+}
+
+.resize-handle { right: -22px; bottom: -22px; border-radius: 9px; transform-origin: 100% 100%; }
+.resize-handle::after { content: "⤡"; font-size: 18px; line-height: 42px; display: block; text-align: center; }
+.resize-handle:active { background: var(--accent); color: var(--accent-ink); }
+
+.ratio-lock { right: -22px; bottom: 30px; border-radius: 50%; transform-origin: 100% 50%; font-size: 15px; }
+.ratio-lock[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.ratio-lock[hidden] { display: none !important; }
+
+.resize-readout {
+  position: absolute;
+  right: 34px; bottom: 34px;
+  z-index: 6;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(20,20,18,.9);
+  color: #f4f0e8;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: scale(calc(1 / var(--zoom, 1)));
+  transform-origin: 100% 100%;
+}
+
+/* ---- Barres aimantées (§14, §15) ---- */
+
+.dock { position: fixed; z-index: 30; }
+.dock--dragging { opacity: .92; }
+.dock--will-snap { outline: 1px solid var(--accent); }
+.dock--collapsed > *:not(.dock-handle) { display: none; }
+.dock--collapsed { padding: 4px; }
+
+.dock-handle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  min-height: 44px;
+  color: #8f8c85;
+  font-size: 15px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.dock-handle:active { cursor: grabbing; color: var(--accent); }
+
+.dock-guide {
+  position: fixed;
+  z-index: 29;
+  background: var(--accent);
+  opacity: .75;
+  pointer-events: none;
+}
+
+.mini-palette {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(20,20,18,.86);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.mini-palette .tool-slider input[type="range"] { width: 78px; }
 
 .variation-actions { display: grid; gap: 7px; padding: 15px; border-bottom: 1px solid var(--line); }
 .variation-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }

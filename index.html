@@ -226,8 +226,15 @@
           <div class="rendering" id="rendering">Calcul du relief…</div>
           <div class="art-wrap" id="artWrap" data-shape="rectangle">
             <canvas id="reliefCanvas" role="img" aria-label="Aperçu d’un panneau mural abstrait en relief organique"></canvas>
+            <!-- Poignée de redimensionnement physique (§3) et verrou de ratio.
+                 Les deux s'appliquent l'échelle inverse du zoom : ce sont des
+                 commandes, elles ne doivent pas grossir avec l'œuvre. -->
+            <button class="ratio-lock" id="ratioLock" type="button" aria-pressed="false" title="Verrouiller le rapport largeur/hauteur">⛓</button>
+            <button class="resize-handle" id="resizeHandle" type="button" aria-label="Redimensionner le panneau"></button>
+            <div class="resize-readout" id="resizeReadout" hidden></div>
           </div>
-          <div class="toolbar" id="toolbar" role="toolbar" aria-label="Outils de sculpture">
+          <div class="toolbar dock" id="toolbar" role="toolbar" aria-label="Outils de sculpture">
+            <span class="dock-handle" id="toolbarHandle" aria-hidden="true" title="Déplacer la barre">⣿</span>
             <button class="tool active" type="button" data-tool="light"><span class="tool-icon" aria-hidden="true">☀</span>Lumière</button>
             <button class="tool" type="button" data-tool="warp"><span class="tool-icon" aria-hidden="true">〰</span>Onduler</button>
             <button class="tool" type="button" data-tool="dig"><span class="tool-icon" aria-hidden="true">◡</span>Creuser</button>
@@ -240,6 +247,19 @@
             <span class="tool-sep" aria-hidden="true"></span>
             <label class="tool-slider">Taille <output class="tool-slider-value" id="brushSizeValue"></output><input type="range" id="brushSize" min="2" max="80" step="1" value="19"></label>
             <label class="tool-slider">Force <output class="tool-slider-value" id="brushStrengthValue"></output><input type="range" id="brushStrength" min="10" max="100" step="1" value="55"></label>
+            <span class="tool-sep" aria-hidden="true"></span>
+            <button class="tool" type="button" id="miniToggle" title="Palette rapide"><span class="tool-icon" aria-hidden="true">▤</span>Palette</button>
+            <button class="tool" type="button" id="resetView" title="Vue face"><span class="tool-icon" aria-hidden="true">⌂</span>Vue face</button>
+            <button class="tool" type="button" id="toolbarCollapse" title="Réduire la barre"><span class="tool-icon" aria-hidden="true">–</span>Réduire</button>
+          </div>
+
+          <!-- Mini-palette (§15) : le strict nécessaire au Pencil. -->
+          <div class="mini-palette dock" id="miniPalette" role="toolbar" aria-label="Palette rapide" hidden>
+            <span class="dock-handle" id="miniHandle" aria-hidden="true" title="Déplacer la palette">⣿</span>
+            <button class="tool" type="button" data-mini-tool="dig"><span class="tool-icon" aria-hidden="true">◡</span>Creuser</button>
+            <button class="tool" type="button" data-mini-tool="raise"><span class="tool-icon" aria-hidden="true">◠</span>Bomber</button>
+            <label class="tool-slider">Taille <output class="tool-slider-value" id="miniSizeValue"></output><input type="range" id="miniSize" min="2" max="80" step="1" value="19"></label>
+            <label class="tool-slider">Force <output class="tool-slider-value" id="miniStrengthValue"></output><input type="range" id="miniStrength" min="10" max="100" step="1" value="55"></label>
           </div>
         </div>
         <footer class="stage-footer">

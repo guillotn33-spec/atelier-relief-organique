@@ -7,7 +7,10 @@
 // curseur de lumière.
 
 import { clamp } from '../core/math.js';
-import { PRESETS, applyPreset, aspectOf, baseGeometryOf, captureBase } from '../core/project.js';
+import { BOUNDS, PRESETS, applyPreset, aspectOf, baseGeometryOf, captureBase } from '../core/project.js';
+import { GestureManager, ROLE } from './gestures.js';
+import { Viewport } from './viewport.js';
+import { Dock } from './dock.js';
 import { nextVariation } from '../geometry/variation.js';
 import { buildHeightmap, updateHeightmapRect } from '../geometry/heightmap.js';
 import { createRenderCache, renderFull, renderPatch } from '../render2d/renderer.js';
@@ -94,9 +97,11 @@ export class Atelier {
     this.stroke = null;
     this.strokeDirty = null;
     this.patchQueued = false;
-    this.lightPointerId = null;
     this.lightBusy = false;
-    this.pointers = new Set();
+    this.lightMoved = false;
+    // Vrai dès qu'un geste occupe l'atelier, quel que soit son rôle.
+    this.gestureActive = false;
+    this.resize = null;
 
     // Qualité de départ de l'animation : 0,22 et non 0,45.
     //
@@ -109,9 +114,19 @@ export class Atelier {
     this.saveProjectTimer = 0;
     this.saveSculptTimer = 0;
 
+    this.viewport = new Viewport(this.artWrap, this.stage, {
+      onChange: () => {
+        this.project.ui.viewport = this.viewport.serialize();
+        this.scheduleSaveProject();
+      },
+    });
+    this.viewport.restore(this.project.ui.viewport);
+
     this.bindControls();
     this.bindTools();
-    this.bindPointer();
+    this.bindGestures();
+    this.bindResizeHandle();
+    this.bindDocks();
     this.bindMisc();
 
     this.syncControlsFromProject();
@@ -191,6 +206,7 @@ export class Atelier {
     this.updateControlDisplays();
     this.updateBrushDisplays();
     this.refreshBaseButton();
+    this.syncMiniPalette();
   }
 
   updateControlDisplays() {
@@ -227,9 +243,17 @@ export class Atelier {
     const aspect = aspectOf(this.project);
     this.artWrap.style.setProperty('--canvas-aspect', String(aspect));
     this.artWrap.dataset.shape = this.project.canvasShape;
-    const locked = this.project.canvasShape !== 'rectangle';
-    if (this.heightControl) this.heightControl.hidden = locked;
-    if (this.widthLabel) this.widthLabel.textContent = this.project.canvasShape === 'circle' ? 'Diamètre' : locked ? 'Côté' : 'Largeur';
+    const shapeLocked = this.project.canvasShape !== 'rectangle';
+    if (this.heightControl) this.heightControl.hidden = shapeLocked;
+    if (this.widthLabel) this.widthLabel.textContent = this.project.canvasShape === 'circle' ? 'Diamètre' : shapeLocked ? 'Côté' : 'Largeur';
+
+    // Le cadenas n'a de sens que pour le rectangle : le carré et le rond
+    // imposent 1:1 par définition, pas par réglage.
+    const lock = this.root.querySelector('#ratioLock');
+    if (lock) {
+      lock.hidden = shapeLocked;
+      lock.setAttribute('aria-pressed', String(!!this.project.ui.ratioLocked));
+    }
   }
 
   updateEnvironment() {
@@ -323,116 +347,166 @@ export class Atelier {
     this.hintText.textContent = meta.hint;
   }
 
-  // ---- Pointeurs ----
+  // ---- Gestes (§22) ----
+  //
+  // Tous les pointeurs passent par l'arbitre, qui décide d'UN rôle à l'ouverture
+  // du geste et le verrouille jusqu'au relevé du dernier pointeur. Les sept
+  // séquences de `tests/gestures.mjs` éprouvent cette machine hors DOM ; ici on
+  // ne fait que la brancher.
 
-  bindPointer() {
-    const wrap = this.artWrap;
+  bindGestures() {
+    const stage = this.stage;
 
-    wrap.addEventListener('pointerdown', (event) => {
+    this.gestures = new GestureManager({
+      activeTool: () => this.project.ui.activeTool,
+      hitTest: (p) => this.zoneOf(p),
+      onRoleChange: (role) => {
+        // L'animation est suspendue pendant TOUT geste, quel qu'il soit : il n'y
+        // a donc aucune interaction animation × pinch × trait à gérer.
+        this.gestureActive = role !== ROLE.NONE;
+      },
+      onSculptStart: (p) => {
+        this.pushUndo();
+        this.beginStroke(p);
+      },
+      onSculptMove: (p) => this.continueStroke(p),
+      onSculptEnd: () => this.endStroke(),
+      onLightStart: (p) => this.moveLight(p),
+      onLightMove: (p) => this.moveLight(p),
+      onCameraStart: (s) => this.viewport.beginPinch(s),
+      onCameraMove: (s) => this.viewport.updatePinch(s),
+      onPanStart: (p) => this.viewport.beginPan(p),
+      onPanMove: (p) => this.viewport.updatePan(p),
+      onResizeStart: (p) => this.beginResize(p),
+      onResizeMove: (p) => this.updateResize(p),
+      onResizeEnd: () => this.endResize(),
+    });
+
+    const toPointer = (event) => ({
+      id: event.pointerId,
+      type: event.pointerType || 'mouse',
+      x: event.clientX,
+      y: event.clientY,
+      pressure: event.pressure > 0 ? event.pressure : 0.55,
+      time: event.timeStamp,
+      target: event.target,
+    });
+
+    stage.addEventListener('pointerdown', (event) => {
+      const p = toPointer(event);
+      // On ne confisque jamais un pointeur destiné à l'interface : les boutons
+      // et les curseurs doivent continuer de fonctionner normalement.
+      if (this.zoneOf(p) !== 'ui') event.preventDefault();
+      this.gestures.pointerDown(p);
+    });
+
+    stage.addEventListener('pointermove', (event) => {
+      if (this.gestures.pointerCount === 0) return;
+      const p = toPointer(event);
+      // Les événements coalescés ne servent qu'au trait ; les autres rôles se
+      // contentent du dernier point connu.
+      if (this.gestures.role === ROLE.SCULPT && event.getCoalescedEvents) {
+        const list = event.getCoalescedEvents();
+        if (list && list.length) p.coalesced = list;
+      }
       event.preventDefault();
-      this.pointers.add(event.pointerId);
-      if (this.pointers.size > 1) {
-        // Comportement de la version 1 conservé au lot 1 : le second pointeur
-        // annule le geste. Le vrai gestionnaire multi-pointeur (pinch, orbite,
-        // priorités de gestes) est le lot 3.
-        this.endStroke();
-        this.lightPointerId = null;
-        return;
-      }
-
-      // La capture est un confort — elle garde le geste vivant hors de l'œuvre.
-      // Elle échoue sur certains pointeurs (et sur tout événement synthétique) :
-      // l'échec ne doit jamais interrompre le traitement du geste lui-même.
-      const capture = () => {
-        try {
-          wrap.setPointerCapture(event.pointerId);
-        } catch (_) {
-          /* geste traité sans capture */
-        }
-      };
-
-      if (this.project.ui.activeTool === 'light') {
-        this.lightPointerId = event.pointerId;
-        capture();
-        this.moveLight(event);
-        return;
-      }
-
-      capture();
-      this.pushUndo();
-      const point = this.toCm(event);
-      this.stroke = { id: event.pointerId, lastX: point.xCm, lastY: point.yCm };
-      this.applyStroke(event, true);
+      this.gestures.pointerMove(p);
     });
 
-    wrap.addEventListener('pointermove', (event) => {
-      if (this.stroke && event.pointerId === this.stroke.id && this.pointers.size === 1) {
-        event.preventDefault();
-        this.applyStroke(event, false);
-      } else if (this.lightPointerId === event.pointerId) {
-        event.preventDefault();
-        this.moveLight(event);
-      }
+    // Fins de geste écoutées sur la FENÊTRE. C'est ce qui empêche un pointeur
+    // relevé hors de la toile de rester compté — le défaut relevé au lot 0.
+    window.addEventListener('pointerup', (event) => {
+      if (this.gestures.pointerCount === 0) return;
+      this.gestures.pointerUp(toPointer(event));
+      this.afterGesture();
     });
-
-    // Les fins de geste sont écoutées sur la FENÊTRE, pas sur l'élément.
-    // La version 1 les écoutait sur l'œuvre : un second doigt relevé en dehors
-    // ne renvoyait jamais de `pointerup`, l'ensemble des pointeurs actifs ne
-    // redescendait jamais à zéro et toute sculpture ultérieure restait bloquée.
-    const release = (event) => {
-      this.pointers.delete(event.pointerId);
-      if (this.stroke && event.pointerId === this.stroke.id) this.endStroke();
-      if (this.lightPointerId === event.pointerId) {
-        this.lightPointerId = null;
-        this.render();
-        this.scheduleSaveProject();
-      }
-    };
-    window.addEventListener('pointerup', release);
-    window.addEventListener('pointercancel', release);
+    window.addEventListener('pointercancel', (event) => {
+      if (this.gestures.pointerCount === 0) return;
+      this.gestures.pointerCancel(toPointer(event));
+      this.afterGesture();
+    });
+    window.addEventListener('blur', () => {
+      if (!this.gestures.busy) return;
+      this.gestures.cancelAll();
+      this.afterGesture();
+    });
   }
 
-  toCm(event) {
+  /** Zone touchée — c'est elle qui porte la priorité des gestes de §22. */
+  zoneOf(p) {
+    const target = p.target;
+    if (target && target.closest) {
+      if (target.closest('#resizeHandle')) return 'resize';
+      if (target.closest('.dock, .tool, .btn, .ratio-lock, input, select, label, summary')) return 'ui';
+    }
     const rect = this.artWrap.getBoundingClientRect();
-    const u = (event.clientX - rect.left) / rect.width;
-    const v = (event.clientY - rect.top) / rect.height;
+    const inside = p.x >= rect.left && p.x <= rect.right && p.y >= rect.top && p.y <= rect.bottom;
+    return inside ? 'canvas' : 'outside';
+  }
+
+  /** Remise en ordre après un geste : la vue et la caméra reprennent la main. */
+  afterGesture() {
+    if (this.gestures.role !== ROLE.NONE) return;
+    this.viewport.endPinch();
+    this.viewport.endPan();
+    if (this.lightMoved) {
+      this.lightMoved = false;
+      this.render();
+      this.scheduleSaveProject();
+    }
+    if (this.anim.enabled) this.restartAnim();
+  }
+
+  toCm(clientX, clientY) {
+    // Le rectangle renvoyé est DÉJÀ transformé par le zoom : la conversion en
+    // centimètres n'a donc pas à connaître la vue.
+    const rect = this.artWrap.getBoundingClientRect();
+    const u = (clientX - rect.left) / rect.width;
+    const v = (clientY - rect.top) / rect.height;
     return {
       xCm: (u - 0.5) * this.project.widthCm,
       yCm: (v - 0.5) * this.project.heightCm,
     };
   }
 
-  applyStroke(event, first) {
-    // `getCoalescedEvents()` peut renvoyer une liste VIDE — c'est le cas de tout
-    // événement synthétique, et de certaines implémentations sur `pointerdown`.
-    // Sans repli, le trait est silencieusement ignoré.
-    const coalesced = event.getCoalescedEvents ? event.getCoalescedEvents() : null;
-    const events = coalesced && coalesced.length ? coalesced : [event];
-    let isFirst = first;
-    for (const sample of events) {
-      const { xCm, yCm } = this.toCm(sample);
-      const pressure = sample.pressure > 0 ? sample.pressure : 0.55;
-      const dxCm = isFirst ? 0 : xCm - this.stroke.lastX;
-      const dyCm = isFirst ? 0 : yCm - this.stroke.lastY;
-      const rect = stamp(this.layer, {
-        tool: this.project.ui.activeTool,
-        xCm,
-        yCm,
-        dxCm,
-        dyCm,
-        radiusCm: this.project.ui.brushSizeCm,
-        strength: this.project.ui.brushStrength,
-        pressure,
-        elongation: this.project.ui.brushElongation,
-        angleDeg: this.project.ui.brushAngle,
-        first: isFirst,
-      });
-      if (rect) this.growDirty(rect);
-      this.stroke.lastX = xCm;
-      this.stroke.lastY = yCm;
-      isFirst = false;
+  beginStroke(p) {
+    const { xCm, yCm } = this.toCm(p.x, p.y);
+    this.stroke = { lastX: xCm, lastY: yCm };
+    this.stampAt(xCm, yCm, 0, 0, p.pressure, true);
+    this.queuePatch();
+  }
+
+  continueStroke(p) {
+    if (!this.stroke) return;
+    if (p.coalesced) {
+      for (const sample of p.coalesced) {
+        const { xCm, yCm } = this.toCm(sample.clientX, sample.clientY);
+        this.stampAt(xCm, yCm, xCm - this.stroke.lastX, yCm - this.stroke.lastY, sample.pressure > 0 ? sample.pressure : 0.55, false);
+      }
+    } else {
+      const { xCm, yCm } = this.toCm(p.x, p.y);
+      this.stampAt(xCm, yCm, xCm - this.stroke.lastX, yCm - this.stroke.lastY, p.pressure, false);
     }
     this.queuePatch();
+  }
+
+  stampAt(xCm, yCm, dxCm, dyCm, pressure, first) {
+    const rect = stamp(this.layer, {
+      tool: this.project.ui.activeTool,
+      xCm,
+      yCm,
+      dxCm,
+      dyCm,
+      radiusCm: this.project.ui.brushSizeCm,
+      strength: this.project.ui.brushStrength,
+      pressure,
+      elongation: this.project.ui.brushElongation,
+      angleDeg: this.project.ui.brushAngle,
+      first,
+    });
+    if (rect) this.growDirty(rect);
+    this.stroke.lastX = xCm;
+    this.stroke.lastY = yCm;
   }
 
   growDirty(rect) {
@@ -478,16 +552,17 @@ export class Atelier {
     this.scheduleSaveSculpt();
   }
 
-  moveLight(event) {
+  moveLight(p) {
     const rect = this.artWrap.getBoundingClientRect();
-    const x = event.clientX - rect.left - rect.width / 2;
-    const y = event.clientY - rect.top - rect.height / 2;
+    const x = p.x - rect.left - rect.width / 2;
+    const y = p.y - rect.top - rect.height / 2;
     let angle = (Math.atan2(y, x) * 180) / Math.PI;
     if (angle < 0) angle += 360;
     this.project.lighting.angle = Math.round(angle);
     if (this.controls.lightAngle) this.controls.lightAngle.value = String(this.project.lighting.angle);
     this.markCustom();
     this.updateControlDisplays();
+    this.lightMoved = true;
     if (!this.lightBusy) {
       this.lightBusy = true;
       requestAnimationFrame(() => {
@@ -534,6 +609,169 @@ export class Atelier {
   refreshBaseButton() {
     const button = this.root.querySelector('#restoreBase');
     if (button) button.disabled = !this.project.baseDesignSnapshot;
+  }
+
+  // ---- Redimensionnement physique de la toile (§3) ----
+  //
+  // À ne jamais confondre avec le zoom : ici ce sont les CENTIMÈTRES du panneau
+  // qui changent. Le champ étant ancré en centimètres, agrandir révèle du motif
+  // supplémentaire sans déplacer celui qui est déjà là — le relief n'est donc
+  // jamais étiré, il est réévalué sur une fenêtre plus large.
+
+  bindResizeHandle() {
+    const lock = this.root.querySelector('#ratioLock');
+    lock.addEventListener('click', () => {
+      this.project.ui.ratioLocked = !this.project.ui.ratioLocked;
+      this.applyShapeToDom();
+      this.scheduleSaveProject();
+    });
+    this.resizeReadout = this.root.querySelector('#resizeReadout');
+  }
+
+  beginResize(p) {
+    const rect = this.artWrap.getBoundingClientRect();
+    this.resize = {
+      startX: p.x,
+      startY: p.y,
+      startW: this.project.widthCm,
+      startH: this.project.heightCm,
+      // Échelle réelle à l'écran, zoom compris : la poignée doit suivre le doigt.
+      pxPerCmX: rect.width / this.project.widthCm,
+      pxPerCmY: rect.height / this.project.heightCm,
+    };
+    this.resizeReadout.hidden = false;
+    this.updateResizeReadout();
+  }
+
+  updateResize(p) {
+    if (!this.resize) return;
+    const r = this.resize;
+    const bounds = BOUNDS[this.project.canvasShape];
+    const locked = this.project.canvasShape !== 'rectangle' || this.project.ui.ratioLocked;
+
+    let widthCm = r.startW + (p.x - r.startX) / r.pxPerCmX;
+    let heightCm = r.startH + (p.y - r.startY) / r.pxPerCmY;
+
+    if (locked) {
+      // Ratio verrouillé : c'est le déplacement dominant qui commande, et
+      // l'autre dimension suit exactement.
+      const ratio = r.startW / r.startH;
+      if (Math.abs(p.x - r.startX) >= Math.abs(p.y - r.startY)) heightCm = widthCm / ratio;
+      else widthCm = heightCm * ratio;
+    }
+
+    widthCm = clamp(Math.round(widthCm), bounds.widthCm.min, bounds.widthCm.max);
+    const heightBound = bounds.heightCm || bounds.widthCm;
+    heightCm = clamp(Math.round(heightCm), heightBound.min, heightBound.max);
+    if (this.project.canvasShape !== 'rectangle') heightCm = widthCm;
+
+    this.project.widthCm = widthCm;
+    this.project.heightCm = heightCm;
+    if (this.controls.widthCm) this.controls.widthCm.value = String(widthCm);
+    if (this.controls.heightCm) this.controls.heightCm.value = String(heightCm);
+    this.layer.ensureCovers(widthCm, heightCm);
+    this.applyShapeToDom();
+    this.updateResizeReadout();
+    this.previewResize();
+  }
+
+  updateResizeReadout() {
+    if (!this.resizeReadout) return;
+    this.resizeReadout.textContent = `${Math.round(this.project.widthCm)} × ${Math.round(this.project.heightCm)} cm`;
+  }
+
+  /** Aperçu pendant le glisser : même relief, échantillonné plus grossièrement. */
+  previewResize() {
+    if (this.resizePreviewQueued) return;
+    this.resizePreviewQueued = true;
+    requestAnimationFrame(() => {
+      this.resizePreviewQueued = false;
+      if (!this.resize) return;
+      this.hm = buildHeightmap(this.project, this.layer, { quality: 0.35 });
+      this.render();
+    });
+  }
+
+  endResize() {
+    if (!this.resize) return;
+    this.resize = null;
+    this.resizeReadout.hidden = true;
+    this.rebuild();
+    this.updateControlDisplays();
+    this.scheduleSaveProject();
+  }
+
+  // ---- Barres (§14, §15) ----
+
+  bindDocks() {
+    const ui = this.project.ui;
+    ui.docks = ui.docks || {};
+
+    this.toolbarDock = new Dock(this.root.querySelector('#toolbar'), {
+      handle: this.root.querySelector('#toolbarHandle'),
+      collapseBtn: this.root.querySelector('#toolbarCollapse'),
+      artWrap: this.artWrap,
+      state: ui.docks.toolbar,
+      onPersist: (state) => {
+        ui.docks.toolbar = state;
+        this.scheduleSaveProject();
+      },
+    });
+
+    this.miniDock = new Dock(this.root.querySelector('#miniPalette'), {
+      handle: this.root.querySelector('#miniHandle'),
+      artWrap: this.artWrap,
+      state: ui.docks.mini,
+      onPersist: (state) => {
+        ui.docks.mini = state;
+        this.scheduleSaveProject();
+      },
+    });
+
+    this.root.querySelector('#miniToggle').addEventListener('click', () => {
+      this.miniDock.setVisible(!this.miniDock.state.visible);
+    });
+
+    this.root.querySelector('#resetView').addEventListener('click', () => {
+      this.viewport.reset();
+      this.render();
+    });
+
+    // La mini-palette n'a pas d'état propre : elle pilote les mêmes réglages
+    // que la barre principale, et les deux restent synchronisées.
+    this.root.querySelectorAll('[data-mini-tool]').forEach((button) => {
+      button.addEventListener('click', () => {
+        this.setTool(button.dataset.miniTool);
+        this.syncMiniPalette();
+        this.scheduleSaveProject();
+      });
+    });
+    const miniSize = this.root.querySelector('#miniSize');
+    const miniStrength = this.root.querySelector('#miniStrength');
+    miniSize.addEventListener('input', () => {
+      this.brushSize.value = miniSize.value;
+      this.brushSize.dispatchEvent(new Event('input', { bubbles: true }));
+      this.syncMiniPalette();
+    });
+    miniStrength.addEventListener('input', () => {
+      this.brushStrength.value = miniStrength.value;
+      this.brushStrength.dispatchEvent(new Event('input', { bubbles: true }));
+      this.syncMiniPalette();
+    });
+    this.syncMiniPalette();
+  }
+
+  syncMiniPalette() {
+    const miniSize = this.root.querySelector('#miniSize');
+    const miniStrength = this.root.querySelector('#miniStrength');
+    if (!miniSize) return;
+    miniSize.value = this.brushSize.value;
+    miniStrength.value = this.brushStrength.value;
+    this.root.querySelector('#miniSizeValue').value = `${miniSize.value} cm`;
+    this.root.querySelector('#miniStrengthValue').value = `${miniStrength.value} %`;
+    this.root.querySelectorAll('[data-mini-tool]').forEach((b) => {
+      b.classList.toggle('active', b.dataset.miniTool === this.project.ui.activeTool);
+    });
   }
 
   // ---- Annuler / rétablir ----
@@ -653,7 +891,7 @@ export class Atelier {
 
   animFrame(ts) {
     this.anim.raf = requestAnimationFrame((next) => this.animFrame(next));
-    if (!this.anim.enabled || document.hidden || this.stroke || this.lightPointerId !== null) return;
+    if (!this.anim.enabled || document.hidden || this.gestureActive) return;
     if (ts - this.anim.lastTs < 40) return;
     this.anim.lastTs = ts;
 
