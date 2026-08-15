@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Banc de mesure — animation</title>
+  <style>
+    body { margin: 0; padding: 18px; background: #11110f; color: #f4f0e8;
+           font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    h1 { font-size: 14px; font-weight: 600; margin: 0 0 12px; color: #d9ff74; }
+    pre { margin: 0 0 18px; white-space: pre; overflow-x: auto; line-height: 1.55; }
+    canvas { width: 100%; max-width: 760px; display: block; border: 1px solid #333; }
+  </style>
+</head>
+<body>
+  <h1>Banc de mesure — coût d'une image d'animation</h1>
+  <pre id="out">mesure en cours…</pre>
+  <canvas id="view"></canvas>
+  <script type="module" src="bench.js"></script>
+</body>
+</html>

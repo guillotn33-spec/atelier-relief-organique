@@ -19,7 +19,9 @@ await rm(dist, { recursive: true, force: true });
 await mkdir(dist, { recursive: true });
 
 // Actifs statiques copiés tels quels à la racine de dist/.
-const staticFiles = ['index.html'];
+// Le banc de mesure n'est servi qu'en développement : il ne doit pas être
+// déployé avec l'application.
+const staticFiles = serve ? ['index.html', 'bench.html'] : ['index.html'];
 for (const file of staticFiles) {
   await copyFile(path.join(root, file), path.join(dist, file));
 }
@@ -27,12 +29,17 @@ for (const file of staticFiles) {
 // Les images de référence ne sont pas embarquées dans l'application ; elles
 // restent des documents de travail à la racine du dépôt.
 
+// Entrées nommées plutôt qu'un `outfile` : cela conserve `app.js` / `app.css`
+// tout en permettant d'ajouter le banc en développement seulement.
+const entryPoints = { app: path.join(root, 'src', 'main.js') };
+if (serve) entryPoints.bench = path.join(root, 'src', 'bench.js');
+
 const options = {
-  entryPoints: [path.join(root, 'src', 'main.js')],
+  entryPoints,
   bundle: true,
   format: 'esm',
   target: ['safari16'],
-  outfile: path.join(dist, 'app.js'),
+  outdir: dist,
   sourcemap: serve ? 'inline' : false,
   minify: !serve,
   legalComments: 'none',

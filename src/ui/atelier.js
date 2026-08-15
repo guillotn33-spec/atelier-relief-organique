@@ -98,7 +98,13 @@ export class Atelier {
     this.lightBusy = false;
     this.pointers = new Set();
 
-    this.anim = { enabled: false, raf: 0, canvas: null, cache: null, quality: 0.45, lastTs: 0, avg: 0 };
+    // Qualité de départ de l'animation : 0,22 et non 0,45.
+    //
+    // Mesuré sur ce poste, panneau 200 × 120 cm : une image coûte 70,9 ms à
+    // qualité 0,45 (14 im/s) contre 14,0 ms à 0,18 (71 im/s). Démarrer à 0,45
+    // faisait passer la première seconde d'animation à 14 im/s avant que la
+    // boucle adaptative ne descende. On démarre donc déjà bas.
+    this.anim = { enabled: false, raf: 0, canvas: null, cache: null, quality: 0.22, lastTs: 0, avg: 0 };
 
     this.saveProjectTimer = 0;
     this.saveSculptTimer = 0;
