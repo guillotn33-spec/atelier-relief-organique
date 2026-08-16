@@ -70,12 +70,16 @@ async function boot() {
       onNewProject: () => showCreation(),
     });
     if (persistence) {
-      db.saveProject(project).catch(() => {});
-      db.setMeta('lastProjectId', project.id).catch(() => {});
+      // Passe par l'atelier plutôt que par un `.catch` vide : le premier
+      // enregistrement est aussi le premier moment où le stockage peut refuser,
+      // et c'est exactement celui qu'il ne faut pas taire.
+      atelier.saveProjectNow();
     }
     if (!persistence) {
-      const footer = atelierRoot.querySelector('.stage-footer .hint span:last-child');
-      if (footer) footer.textContent = 'Stockage indisponible — ce projet ne sera pas conservé';
+      // Le message allait dans `#hintText`, que le premier changement d'outil
+      // réécrivait : l'avertissement de non-conservation disparaissait au bout
+      // de quelques secondes. Il a désormais sa propre ligne, persistante.
+      atelier.disableStorage();
     }
   };
 
@@ -98,12 +102,30 @@ async function boot() {
       openAtelier(project, layer);
     },
     onOpen: async (id) => {
-      const stored = await db.loadProject(id);
-      if (!stored) return;
-      const project = hydrate(stored);
-      const sculpt = await db.loadSculpt(id);
-      const layer = sculpt ? SculptLayer.deserialize(sculpt) : SculptLayer.forCanvas(project.widthCm, project.heightCm);
-      openAtelier(project, layer);
+      // Cette fonction est asynchrone et appelée depuis un écouteur de clic :
+      // son rejet n'était rattrapé par personne. Un enregistrement illisible
+      // faisait donc un bouton qui ne répond à rien, sans un mot dans
+      // l'interface ni la moindre trace pour comprendre.
+      try {
+        const stored = await db.loadProject(id);
+        if (!stored) {
+          showBootError('Ce projet est introuvable — il a peut-être été supprimé.');
+          return;
+        }
+        const project = hydrate(stored);
+        let layer = null;
+        try {
+          const sculpt = await db.loadSculpt(id);
+          if (sculpt) layer = SculptLayer.deserialize(sculpt);
+        } catch (_) {
+          // Le calque est perdu, pas le projet : on ouvre le relief sans la
+          // sculpture manuelle plutôt que de refuser l'ouverture entière.
+          layer = null;
+        }
+        openAtelier(project, layer || SculptLayer.forCanvas(project.widthCm, project.heightCm));
+      } catch (error) {
+        showBootError(`Ce projet n'a pas pu être ouvert : ${error.message}`);
+      }
     },
   });
 
@@ -127,19 +149,52 @@ async function boot() {
     /* la reprise est un confort, jamais un blocage */
   }
 
-  const lastId = await db.getMeta('lastProjectId');
-  if (lastId) {
-    const stored = await db.loadProject(lastId);
-    if (stored) {
-      const project = hydrate(stored);
-      const sculpt = await db.loadSculpt(lastId);
-      const layer = sculpt ? SculptLayer.deserialize(sculpt) : SculptLayer.forCanvas(project.widthCm, project.heightCm);
-      openAtelier(project, layer);
-      return;
+  // La reprise automatique est un CONFORT. Si l'enregistrement du dernier projet
+  // est illisible, l'écran de création doit quand même apparaître : auparavant
+  // l'exception remontait jusqu'au `boot()` nu et la page restait vide, sans
+  // aucun moyen d'en sortir puisque l'entrée fautive était relue à chaque
+  // rechargement.
+  try {
+    const lastId = await db.getMeta('lastProjectId');
+    if (lastId) {
+      const stored = await db.loadProject(lastId);
+      if (stored) {
+        const project = hydrate(stored);
+        let layer = null;
+        try {
+          const sculpt = await db.loadSculpt(lastId);
+          if (sculpt) layer = SculptLayer.deserialize(sculpt);
+        } catch (_) {
+          layer = null;
+        }
+        openAtelier(project, layer || SculptLayer.forCanvas(project.widthCm, project.heightCm));
+        return;
+      }
     }
+  } catch (error) {
+    await showCreation();
+    showBootError(`La reprise du dernier projet a échoué : ${error.message}`);
+    return;
   }
 
   await showCreation();
 }
 
-boot();
+/** Affiche un message sur l'écran de création. Le seul canal visible au démarrage. */
+function showBootError(message) {
+  const line = document.getElementById('bootError');
+  if (!line) return;
+  line.textContent = message;
+  line.hidden = false;
+}
+
+// `boot` est asynchrone : sans ce rattrapage, toute exception non prévue laissait
+// une page blanche muette. L'écran de création est démasqué de force pour que
+// l'application reste utilisable même quand la persistance est hors service.
+boot().catch((error) => {
+  const creationRoot = document.getElementById('creation');
+  const atelierRoot = document.getElementById('atelier');
+  if (atelierRoot) atelierRoot.hidden = true;
+  if (creationRoot) creationRoot.hidden = false;
+  showBootError(`Le démarrage a échoué : ${error.message}. L'atelier reste utilisable, sans reprise des projets enregistrés.`);
+});

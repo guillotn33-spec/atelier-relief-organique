@@ -21,6 +21,9 @@ let dbPromise = null;
 
 export function openDb() {
   if (dbPromise) return dbPromise;
+  // Un rejet ne doit PAS être mémoïsé. Conserver la promesse échouée rendait la
+  // sauvegarde définitivement impossible pour toute la session après un seul
+  // incident d'ouverture — et sans que rien ne le signale.
   dbPromise = new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
@@ -32,6 +35,9 @@ export function openDb() {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
     request.onblocked = () => reject(new Error('IndexedDB bloquée par un autre onglet'));
+  });
+  dbPromise.catch(() => {
+    dbPromise = null; // la prochaine tentative repart de zéro
   });
   return dbPromise;
 }

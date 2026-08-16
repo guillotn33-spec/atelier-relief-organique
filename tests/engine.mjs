@@ -236,7 +236,15 @@ const sdInside = stdDevInBand(hmLarge, large, true);
 const sdRevealed = stdDevInBand(hmLarge, large, false);
 console.log(`   écart-type au centre (zone déjà visible) : ${sdInside.toFixed(4)}`);
 console.log(`   écart-type dans la bande révélée         : ${sdRevealed.toFixed(4)}`);
-check('B2 — la bande révélée porte autant de motif que le centre', sdRevealed > sdInside * 0.55, `rapport ${(sdRevealed / sdInside).toFixed(2)}`);
+// Le seuil était à 0,55 sous une étiquette qui promettait « autant de motif » :
+// une bande deux fois moins texturée l'aurait satisfait. Mesuré, le rapport
+// vaut 1,10 — la bande révélée porte même un peu plus de motif que le centre.
+// Le seuil est ramené à 0,85, ce que l'étiquette affirme réellement.
+check(
+  'B2 — la bande révélée porte autant de motif que le centre',
+  sdRevealed > sdInside * 0.85,
+  `rapport ${(sdRevealed / sdInside).toFixed(2)}`
+);
 
 // ---- C. Négatif géométrique, non destructif ----
 
@@ -311,7 +319,28 @@ check('E2 — la variation est déterministe', sameVariation);
 
 const chain = nextVariation(varA);
 const changed = Object.keys(chain).filter((k) => chain[k] !== varA[k]);
-check('E3 — une variation change réellement la géométrie', changed.length >= 8, `${changed.length} paramètres modifiés`);
+// Compter les paramètres modifiés ne prouve rien : huit champs bougés de 1e-9
+// auraient satisfait l'ancien oracle en laissant le relief identique à l'œil.
+// On mesure donc le RELIEF, sur la grandeur qui compte — l'écart rapporté à
+// l'amplitude.
+const reliefA = buildHeightmap(makeProject(varA), null);
+const reliefB = buildHeightmap(makeProject(chain), null);
+let ecartMax = 0;
+let ecartSomme = 0;
+for (let i = 0; i < reliefA.h.length; i++) {
+  const d = Math.abs(reliefA.h[i] - reliefB.h[i]);
+  ecartSomme += d;
+  if (d > ecartMax) ecartMax = d;
+}
+const amplitudeA = reliefA.max - reliefA.min;
+const ecartMoyenPct = (100 * ecartSomme) / reliefA.h.length / amplitudeA;
+console.log(`   variation : ${changed.length} paramètres, écart moyen ${ecartMoyenPct.toFixed(1)} % de l’amplitude, maximal ${((100 * ecartMax) / amplitudeA).toFixed(1)} %`);
+check('E3a — une variation touche plusieurs paramètres', changed.length >= 8, `${changed.length} paramètres modifiés`);
+check(
+  'E3b — et le relief en sort visiblement différent',
+  ecartMoyenPct > 5,
+  `écart moyen ${ecartMoyenPct.toFixed(1)} % de l’amplitude`
+);
 check('E4 — la variation ne touche ni la graine ni la douceur', chain.seed === varA.seed && chain.softness === varA.softness);
 
 // ---- Bilan ----

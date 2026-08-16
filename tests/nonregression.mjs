@@ -165,9 +165,21 @@ for (let i = 0; i <= 200; i++) {
   maxRowDrift = Math.max(maxRowDrift, Math.abs(layerB.rowOf((t - 0.5) * 100) - t * (SH - 1)));
 }
 console.log(`   écart horizontal : ${maxColErr.toExponential(2)} cellule`);
-console.log(`   dérive verticale : ${maxRowDrift.toFixed(4)} cellule (0,23 % documenté dans migrate.js)`);
+console.log(`   dérive verticale : ${maxRowDrift.toFixed(4)} cellule`);
 check('B1 — correspondance horizontale exacte', maxColErr < 1e-9, `${maxColErr.toExponential(2)} cellule`);
-check('B2 — dérive verticale sous une demi-cellule', maxRowDrift < 0.5, `${maxRowDrift.toFixed(4)} cellule`);
+// « Sous une demi-cellule » tolérait presque trois fois la dérive réelle : tout
+// changement du repère de reprise serait passé inaperçu. La dérive attendue se
+// CALCULE depuis ce que `migrate.js` documente — 159 pas de 160/255 cm couvrent
+// 99,7647 cm au lieu de 100 — et s'accumule depuis le centre, donc sur la
+// moitié de la hauteur.
+const hauteurCouverte = (SH - 1) * (160 / (SW - 1));
+const deriveAttendue = ((100 - hauteurCouverte) / 100) * ((SH - 1) / 2);
+console.log(`   dérive attendue d'après migrate.js : ${deriveAttendue.toFixed(4)} cellule`);
+check(
+  'B2 — la dérive verticale est exactement celle que migrate.js documente',
+  Math.abs(maxRowDrift - deriveAttendue) < 0.01,
+  `${maxRowDrift.toFixed(4)} mesurée contre ${deriveAttendue.toFixed(4)} attendue`
+);
 
 // B3 — la grille construite par l'application couvre TOUJOURS la toile.
 // Un point de la toile tombant hors grille renverrait 0 : discontinuité franche

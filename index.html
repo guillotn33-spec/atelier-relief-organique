@@ -3,331 +3,235 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#171715">
+  <meta name="theme-color" content="#171816">
+  <meta name="description" content="Atelier de création de reliefs organiques et export PNG haute définition.">
   <title>Atelier de relief organique</title>
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
-  <!-- Écran de création (§2) — précède l'atelier tant qu'aucun projet n'est ouvert. -->
   <section class="creation" id="creation" hidden aria-label="Nouveau projet">
     <div class="creation-card">
-      <div>
-        <h2>Nouveau panneau</h2>
-        <p class="creation-lead">Choisissez la forme, puis saisissez les dimensions réelles du panneau en centimètres.</p>
+      <div class="creation-heading">
+        <span class="creation-kicker">Nouveau document</span>
+        <h2>Créer un panneau</h2>
+        <p class="creation-lead">Choisissez une forme et ses dimensions réelles. Vous pourrez tout modifier ensuite dans l’atelier.</p>
       </div>
-
       <div class="shape-choice" role="radiogroup" aria-label="Forme de la toile">
-        <button class="shape-option active" type="button" data-shape="rectangle" role="radio" aria-checked="true">
-          <span class="shape-glyph" aria-hidden="true"></span>Rectangle
-        </button>
-        <button class="shape-option" type="button" data-shape="square" role="radio" aria-checked="false">
-          <span class="shape-glyph" aria-hidden="true"></span>Carré
-        </button>
-        <button class="shape-option" type="button" data-shape="circle" role="radio" aria-checked="false">
-          <span class="shape-glyph" aria-hidden="true"></span>Rond
-        </button>
+        <button class="shape-option active" type="button" data-shape="rectangle" role="radio" aria-checked="true"><span class="shape-glyph" aria-hidden="true"></span>Rectangle</button>
+        <button class="shape-option" type="button" data-shape="square" role="radio" aria-checked="false"><span class="shape-glyph" aria-hidden="true"></span>Carré</button>
+        <button class="shape-option" type="button" data-shape="circle" role="radio" aria-checked="false"><span class="shape-glyph" aria-hidden="true"></span>Rond</button>
       </div>
-
       <div class="dim-grid" id="dimGrid"></div>
-
-      <div class="creation-actions">
-        <button class="btn btn-primary" id="createProject" type="button">Ouvrir l’atelier</button>
-      </div>
-
-      <div class="creation-projects" id="creationProjects" hidden>
-        <h3>Projets enregistrés</h3>
-        <div id="projectList"></div>
-      </div>
+      <p class="boot-error" id="bootError" hidden></p>
+      <div class="creation-actions"><button class="btn btn-primary" id="createProject" type="button">Créer le document <span aria-hidden="true">→</span></button></div>
+      <div class="creation-projects" id="creationProjects" hidden><h3>Documents récents</h3><div id="projectList"></div></div>
     </div>
   </section>
 
   <main class="app" id="atelier" hidden>
     <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark" aria-hidden="true">≈</div>
-        <div>
-          <p class="eyebrow">Relief lab</p>
-          <h1>Atelier de relief organique</h1>
-        </div>
-      </div>
+      <div class="brand"><div class="brand-mark" aria-hidden="true">≈</div><div class="brand-copy"><p class="eyebrow">Relief lab</p><h1>Atelier organique</h1></div></div>
+      <nav class="workspace-tabs" aria-label="Espaces de travail">
+        <button class="workspace-tab active" type="button" data-workspace-mode="composition">Composition</button>
+        <button class="workspace-tab" type="button" data-workspace-mode="sculpture">Sculpture</button>
+        <button class="workspace-tab" type="button" data-workspace-mode="presentation">Présentation</button>
+      </nav>
       <div class="top-actions">
-        <button class="btn drawer-toggle" id="drawerToggle" type="button" aria-expanded="false" aria-controls="sidebar"><span class="btn-icon" aria-hidden="true">☰</span> Réglages</button>
-        <button class="btn" id="newProject" type="button"><span class="btn-icon" aria-hidden="true">✚</span> Nouveau</button>
-        <button class="btn" id="variationTop" type="button"><span class="btn-icon" aria-hidden="true">↻</span> Nouvelle variation</button>
-        <button class="btn btn-primary" id="exportTop" type="button"><span class="btn-icon" aria-hidden="true">↓</span> <span class="btn-label">Exporter en PNG</span></button>
+        <button class="icon-btn drawer-toggle" id="drawerToggle" type="button" aria-expanded="false" aria-controls="sidebar" title="Afficher les propriétés"><span aria-hidden="true">☷</span><span class="sr-only">Propriétés</span></button>
+        <button class="btn btn-quiet" id="newProject" type="button"><span aria-hidden="true">＋</span> Nouveau</button>
+        <button class="btn btn-quiet variation-top" id="variationTop" type="button"><span aria-hidden="true">↻</span> Variation</button>
+        <button class="btn btn-primary" id="exportTop" type="button"><span aria-hidden="true">⇩</span> <span class="btn-label">Exporter PNG</span></button>
       </div>
     </header>
 
-    <div class="workspace">
+    <div class="workspace pro-workspace">
       <div class="backdrop" id="backdrop" aria-hidden="true"></div>
-      <aside class="sidebar" id="sidebar" aria-label="Réglages du relief">
-        <div class="sidebar-intro">
-          <p>Choisissez une composition, puis ajustez sa matière, ses creux et sa lumière. Chaque rendu est calculé localement.</p>
+
+      <aside class="library-panel panel-shell" aria-label="Bibliothèque de formes">
+        <div class="panel-titlebar"><div><span class="panel-kicker">Projet</span><h2>Bibliothèque</h2></div><span class="panel-count">3 styles</span></div>
+        <div class="library-scroll">
+          <section class="library-section">
+            <div class="section-heading"><h3>Compositions</h3><span>Base de départ</span></div>
+            <div class="preset-grid presets" aria-label="Préréglages">
+              <button class="preset preset-card active" type="button" data-preset="dunes"><span class="preset-art preset-art-dunes" aria-hidden="true"></span><span class="preset-copy"><strong>Dunes</strong><small>Fluide · ample</small></span></button>
+              <button class="preset preset-card" type="button" data-preset="cellules"><span class="preset-art preset-art-cellules" aria-hidden="true"></span><span class="preset-copy"><strong>Cellules</strong><small>Dense · organique</small></span></button>
+              <button class="preset preset-card" type="button" data-preset="archipel"><span class="preset-art preset-art-archipel" aria-hidden="true"></span><span class="preset-copy"><strong>Archipel</strong><small>Ouvert · contrasté</small></span></button>
+            </div>
+          </section>
+          <section class="library-section">
+            <div class="section-heading"><h3>Génération</h3><span>Explorer sans perdre</span></div>
+            <button class="library-action" id="newVariation" type="button"><span class="library-action-icon" aria-hidden="true">✦</span><span><strong>Nouvelle variation</strong><small>Conserve tous vos réglages</small></span><span aria-hidden="true">↻</span></button>
+            <div class="base-actions"><button class="btn btn-compact" id="setBase" type="button">Définir comme base</button><button class="btn btn-compact" id="restoreBase" type="button" disabled>Restaurer</button></div>
+          </section>
+          <section class="library-section library-help"><span class="help-icon" aria-hidden="true">i</span><p>Commencez avec les quatre molettes. Les réglages détaillés restent disponibles dans les propriétés.</p></section>
         </div>
-
-        <div class="presets" aria-label="Préréglages">
-          <button class="preset active" type="button" data-preset="dunes">Dunes</button>
-          <button class="preset" type="button" data-preset="cellules">Cellules</button>
-          <button class="preset" type="button" data-preset="archipel">Archipel</button>
-        </div>
-
-        <div class="mobile-actions">
-          <button class="btn" id="variationMobile" type="button">↻ Variation</button>
-          <button class="btn btn-primary" id="exportMobile" type="button">↓ Exporter</button>
-        </div>
-
-        <div class="variation-actions" aria-label="Génération">
-          <button class="btn" id="newVariation" type="button"><span class="btn-icon" aria-hidden="true">↻</span> Nouvelle variation</button>
-          <div class="variation-pair">
-            <button class="btn" id="setBase" type="button">Définir comme base</button>
-            <button class="btn" id="restoreBase" type="button" disabled>Retour base</button>
-          </div>
-        </div>
-
-        <details open>
-          <summary>Panneau</summary>
-          <div class="control-list">
-            <label class="control">
-              <span class="control-head"><span id="widthLabel">Largeur</span><output class="control-value" id="widthCmValue"></output></span>
-              <input type="range" id="widthCm" min="1" max="500" step="1" value="160">
-            </label>
-            <label class="control" id="heightControl">
-              <span class="control-head"><span>Hauteur</span><output class="control-value" id="heightCmValue"></output></span>
-              <input type="range" id="heightCm" min="1" max="200" step="1" value="100">
-            </label>
-            <label class="control">
-              <span class="control-head"><span>Profondeur</span><output class="control-value" id="depthCmValue"></output></span>
-              <input type="range" id="depthCm" min="0.1" max="30" step="0.1" value="6">
-            </label>
-          </div>
-        </details>
-
-        <details open>
-          <summary>Composition</summary>
-          <div class="control-list">
-            <label class="control">
-              <span class="control-head"><span>Taille des cavités</span><output class="control-value" id="basinScaleCmValue"></output></span>
-              <input type="range" id="basinScaleCm" min="8" max="160" step="1" value="52">
-            </label>
-            <label class="control">
-              <span class="control-head"><span>Densité</span><output class="control-value" id="densityValue"></output></span>
-              <input type="range" id="density" min="5" max="95" step="1" value="48">
-            </label>
-            <label class="control">
-              <span class="control-head"><span>Chenaux</span><output class="control-value" id="channelWeightValue"></output></span>
-              <input type="range" id="channelWeight" min="0" max="100" step="1" value="55">
-            </label>
-            <label class="control">
-              <span class="control-head"><span>Allongement</span><output class="control-value" id="elongationValue"></output></span>
-              <input type="range" id="elongation" min="0" max="100" step="1" value="55">
-            </label>
-            <label class="control">
-              <span class="control-head"><span>Orientation</span><output class="control-value" id="orientationDegValue"></output></span>
-              <input type="range" id="orientationDeg" min="0" max="180" step="1" value="22">
-            </label>
-            <label class="control">
-              <span class="control-head"><span>Mouvement du dessin</span><output class="control-value" id="warpAmountValue"></output></span>
-              <input type="range" id="warpAmount" min="0" max="100" step="1" value="62">
-            </label>
-            <label class="control">
-              <span class="control-head"><span>Irrégularité</span><output class="control-value" id="irregularityValue"></output></span>
-              <input type="range" id="irregularity" min="0" max="100" step="1" value="35">
-            </label>
-          </div>
-        </details>
-
-        <details open>
-          <summary>Relief &amp; matière</summary>
-          <div class="control-list">
-            <label class="switch-row" for="negative">
-              <span>Négatif</span>
-              <span class="switch"><input type="checkbox" id="negative"><span aria-hidden="true"></span></span>
-            </label>
-            <label class="control">
-              <span class="control-head"><span>Profondeur du relief</span><output class="control-value" id="depthValue"></output></span>
-              <input type="range" id="depth" min="20" max="100" step="1" value="92">
-            </label>
-            <label class="control">
-              <span class="control-head"><span>Épaulement des bords</span><output class="control-value" id="shoulderValue"></output></span>
-              <input type="range" id="shoulder" min="5" max="100" step="1" value="50">
-            </label>
-            <label class="control">
-              <span class="control-head"><span>Douceur des arêtes</span><output class="control-value" id="softnessValue"></output></span>
-              <input type="range" id="softness" min="5" max="100" step="1" value="55">
-            </label>
-            <label class="control">
-              <span class="control-head"><span>Ondulation</span><output class="control-value" id="waveValue"></output></span>
-              <input type="range" id="wave" min="0" max="100" step="1" value="50">
-            </label>
-            <label class="control">
-              <span class="control-head"><span>Grain de surface</span><output class="control-value" id="textureValue"></output></span>
-              <input type="range" id="texture" min="0" max="100" step="1" value="30">
-            </label>
-            <label class="control">
-              <span class="control-head"><span>Finition</span></span>
-              <select class="select" id="finish">
-                <option value="mat">Mat</option>
-                <option value="satine">Satiné</option>
-                <option value="brillant">Brillant</option>
-                <option value="chrome">Chrome</option>
-              </select>
-            </label>
-            <label class="color-row" for="materialColor">
-              <span>Couleur de matière</span>
-              <input type="color" id="materialColor" value="#e8e4dc">
-            </label>
-          </div>
-        </details>
-
-        <details open>
-          <summary>Sculpture</summary>
-          <div class="control-list">
-            <label class="switch-row" for="animate">
-              <span>Animer l’ondulation</span>
-              <span class="switch"><input type="checkbox" id="animate"><span aria-hidden="true"></span></span>
-            </label>
-            <button class="btn" id="clearSculpt" type="button"><span class="btn-icon" aria-hidden="true">⌫</span> Effacer la sculpture</button>
-          </div>
-        </details>
-
-        <details>
-          <summary>Export</summary>
-          <div class="control-list">
-            <label class="control">
-              <span class="control-head"><span>Format</span></span>
-              <select class="select" id="exportFormat">
-                <option value="png">Image PNG</option>
-                <option value="jpeg">Image JPEG</option>
-                <option value="usdz">Modèle USDZ (iPad, Procreate)</option>
-                <option value="obj">Modèle OBJ + MTL</option>
-              </select>
-            </label>
-            <label class="control" id="exportSizeControl">
-              <span class="control-head"><span>Grand côté</span></span>
-              <select class="select" id="exportLongSide">
-                <option value="2048">2048 px</option>
-                <option value="4096">4096 px</option>
-                <option value="custom">Sur mesure…</option>
-              </select>
-            </label>
-            <label class="control" id="exportCustomControl" hidden>
-              <span class="control-head"><span>Définition</span><output class="control-value" id="exportCustomValue"></output></span>
-              <input type="range" id="exportCustom" min="512" max="8192" step="128" value="3072">
-            </label>
-            <label class="switch-row" for="exportTransparent" id="exportTransparentControl" hidden>
-              <span>Fond transparent</span>
-              <span class="switch"><input type="checkbox" id="exportTransparent"><span aria-hidden="true"></span></span>
-            </label>
-            <p class="export-note" id="exportNote"></p>
-            <button class="btn btn-primary" id="exportRun" type="button">Exporter</button>
-          </div>
-        </details>
-
-        <details>
-          <summary>Lumière &amp; présentation</summary>
-          <div class="control-list">
-            <label class="control">
-              <span class="control-head"><span>Direction</span><output class="control-value" id="lightAngleValue"></output></span>
-              <input type="range" id="lightAngle" min="0" max="359" step="1" value="245">
-            </label>
-            <label class="control">
-              <span class="control-head"><span>Hauteur de la lumière</span><output class="control-value" id="lightHeightValue"></output></span>
-              <input type="range" id="lightHeight" min="15" max="80" step="1" value="42">
-            </label>
-            <label class="control">
-              <span class="control-head"><span>Exposition</span><output class="control-value" id="exposureEvValue"></output></span>
-              <input type="range" id="exposureEv" min="-20" max="20" step="1" value="0">
-            </label>
-            <label class="control">
-              <span class="control-head"><span>Intensité des ombres</span><output class="control-value" id="shadowStrengthValue"></output></span>
-              <input type="range" id="shadowStrength" min="0" max="100" step="1" value="55">
-            </label>
-            <label class="control">
-              <span class="control-head"><span>Occlusion des cavités</span><output class="control-value" id="cavityOcclusionValue"></output></span>
-              <input type="range" id="cavityOcclusion" min="0" max="100" step="1" value="50">
-            </label>
-            <label class="control">
-              <span class="control-head"><span>Contraste</span><output class="control-value" id="contrastValue"></output></span>
-              <input type="range" id="contrast" min="20" max="100" step="1" value="80">
-            </label>
-            <label class="control">
-              <span class="control-head"><span>Halo arrière</span><output class="control-value" id="backlightValue"></output></span>
-              <input type="range" id="backlight" min="0" max="100" step="1" value="58">
-            </label>
-            <label class="control">
-              <span class="control-head"><span>Découpe du panneau</span></span>
-              <select class="select" id="panelLayout">
-                <option value="none">Panneau monobloc</option>
-                <option value="2x1">2 panneaux verticaux</option>
-                <option value="2x2">4 panneaux (2 × 2)</option>
-                <option value="3x2">6 panneaux (3 × 2)</option>
-              </select>
-            </label>
-            <label class="switch-row" for="frame">
-              <span>Cadre noir</span>
-              <span class="switch"><input type="checkbox" id="frame" checked><span aria-hidden="true"></span></span>
-            </label>
-            <label class="color-row" for="wallColor">
-              <span>Couleur du mur</span>
-              <input type="color" id="wallColor" value="#d8d3c9">
-            </label>
-          </div>
-        </details>
+        <div class="mobile-actions"><button class="btn" id="variationMobile" type="button">↻ Variation</button><button class="btn btn-primary" id="exportMobile" type="button">⇩ PNG</button></div>
       </aside>
 
       <section class="stage-shell" aria-label="Aperçu du relief">
+        <div class="viewer-titlebar">
+          <div class="viewer-breadcrumb"><span>Composition</span><span aria-hidden="true">/</span><strong id="viewerDocumentName">Relief principal</strong></div>
+          <div class="viewer-actions"><button class="icon-btn" id="resetView" type="button" title="Ajuster l’œuvre à la fenêtre"><span aria-hidden="true">⌗</span><span class="sr-only">Ajuster à la fenêtre</span></button><span class="zoom-readout" id="zoomReadout">100 %</span></div>
+        </div>
+
+        <div class="toolbar dock" id="toolbar" role="toolbar" aria-label="Outils de sculpture">
+          <span class="dock-handle" id="toolbarHandle" aria-hidden="true">⣿</span>
+          <div class="tool-group" aria-label="Outils">
+            <button class="tool active" type="button" data-tool="light"><span class="tool-icon" aria-hidden="true">☀</span><span>Lumière</span></button>
+            <button class="tool" type="button" data-tool="warp"><span class="tool-icon" aria-hidden="true">〰</span><span>Onduler</span></button>
+            <button class="tool" type="button" data-tool="dig"><span class="tool-icon" aria-hidden="true">◡</span><span>Creuser</span></button>
+            <button class="tool" type="button" data-tool="raise"><span class="tool-icon" aria-hidden="true">◠</span><span>Bomber</span></button>
+            <button class="tool" type="button" data-tool="smooth"><span class="tool-icon" aria-hidden="true">≋</span><span>Lisser</span></button>
+            <button class="tool" type="button" data-tool="erase"><span class="tool-icon" aria-hidden="true">⌫</span><span>Gomme</span></button>
+          </div>
+          <span class="tool-sep" aria-hidden="true"></span>
+          <div class="tool-group compact" aria-label="Historique sculpture"><button class="tool tool-icon-only" type="button" id="undoBtn" disabled title="Annuler"><span class="tool-icon" aria-hidden="true">↶</span><span class="sr-only">Annuler</span></button><button class="tool tool-icon-only" type="button" id="redoBtn" disabled title="Rétablir"><span class="tool-icon" aria-hidden="true">↷</span><span class="sr-only">Rétablir</span></button></div>
+          <span class="tool-sep brush-options-sep" aria-hidden="true"></span>
+          <div class="brush-options">
+            <label class="tool-slider">Taille <output class="tool-slider-value" id="brushSizeValue"></output><input type="range" id="brushSize" min="2" max="80" step="1" value="19"></label>
+            <label class="tool-slider">Force <output class="tool-slider-value" id="brushStrengthValue"></output><input type="range" id="brushStrength" min="10" max="100" step="1" value="55"></label>
+            <label class="tool-slider advanced-brush">Allongement <output class="tool-slider-value" id="brushElongationValue"></output><input type="range" id="brushElongation" min="0" max="100" step="1" value="0"></label>
+            <label class="tool-slider advanced-brush" id="brushAngleField">Orientation <output class="tool-slider-value" id="brushAngleValue"></output><input type="range" id="brushAngle" min="0" max="179" step="1" value="0"></label>
+            <label class="tool-check advanced-brush" title="La brosse se couche dans le sens du geste"><input type="checkbox" id="brushFollow"> Suit le tracé</label>
+            <span class="brush-preview advanced-brush" id="brushPreview" aria-hidden="true"><span class="brush-preview-shape" id="brushPreviewShape"></span></span>
+          </div>
+          <button class="tool utility-tool" type="button" id="miniToggle" title="Palette rapide" hidden><span class="tool-icon" aria-hidden="true">▤</span>Palette</button>
+          <button class="tool utility-tool" type="button" id="toolbarCollapse" title="Réduire" hidden><span class="tool-icon" aria-hidden="true">–</span>Réduire</button>
+        </div>
+
         <div class="stage" id="stage">
           <div class="rendering" id="rendering">Calcul du relief…</div>
           <div class="art-wrap" id="artWrap" data-shape="rectangle">
             <canvas id="reliefCanvas" role="img" aria-label="Aperçu d’un panneau mural abstrait en relief organique"></canvas>
-            <!-- Vue 3D (§9). Même relief que la 2D : le mesh est construit à
-                 partir de la heightmap canonique, pas d'une seconde géométrie. -->
-            <canvas id="viewer3d" hidden aria-label="Vue en volume du panneau"></canvas>
-            <!-- Poignée de redimensionnement physique (§3) et verrou de ratio.
-                 Les deux s'appliquent l'échelle inverse du zoom : ce sont des
-                 commandes, elles ne doivent pas grossir avec l'œuvre. -->
             <button class="ratio-lock" id="ratioLock" type="button" aria-pressed="false" title="Verrouiller le rapport largeur/hauteur">⛓</button>
             <button class="resize-handle" id="resizeHandle" type="button" aria-label="Redimensionner le panneau"></button>
             <div class="resize-readout" id="resizeReadout" hidden></div>
           </div>
-          <div class="toolbar dock" id="toolbar" role="toolbar" aria-label="Outils de sculpture">
-            <span class="dock-handle" id="toolbarHandle" aria-hidden="true" title="Déplacer la barre">⣿</span>
-            <button class="tool active" type="button" data-tool="light"><span class="tool-icon" aria-hidden="true">☀</span>Lumière</button>
-            <button class="tool" type="button" data-tool="warp"><span class="tool-icon" aria-hidden="true">〰</span>Onduler</button>
-            <button class="tool" type="button" data-tool="dig"><span class="tool-icon" aria-hidden="true">◡</span>Creuser</button>
-            <button class="tool" type="button" data-tool="raise"><span class="tool-icon" aria-hidden="true">◠</span>Bomber</button>
-            <button class="tool" type="button" data-tool="smooth"><span class="tool-icon" aria-hidden="true">≋</span>Lisser</button>
-            <button class="tool" type="button" data-tool="erase"><span class="tool-icon" aria-hidden="true">⌫</span>Gomme</button>
-            <span class="tool-sep" aria-hidden="true"></span>
-            <button class="tool" type="button" id="undoBtn" disabled><span class="tool-icon" aria-hidden="true">↶</span>Annuler</button>
-            <button class="tool" type="button" id="redoBtn" disabled><span class="tool-icon" aria-hidden="true">↷</span>Rétablir</button>
-            <span class="tool-sep" aria-hidden="true"></span>
-            <label class="tool-slider">Taille <output class="tool-slider-value" id="brushSizeValue"></output><input type="range" id="brushSize" min="2" max="80" step="1" value="19"></label>
-            <label class="tool-slider">Force <output class="tool-slider-value" id="brushStrengthValue"></output><input type="range" id="brushStrength" min="10" max="100" step="1" value="55"></label>
-            <span class="tool-sep" aria-hidden="true"></span>
-            <button class="tool" type="button" id="miniToggle" title="Palette rapide"><span class="tool-icon" aria-hidden="true">▤</span>Palette</button>
-            <button class="tool" type="button" id="view3d" title="Voir en volume"><span class="tool-icon" aria-hidden="true">◲</span>Volume</button>
-            <button class="tool" type="button" id="resetView" title="Vue face"><span class="tool-icon" aria-hidden="true">⌂</span>Vue face</button>
-            <button class="tool" type="button" id="toolbarCollapse" title="Réduire la barre"><span class="tool-icon" aria-hidden="true">–</span>Réduire</button>
-          </div>
-
-          <!-- Mini-palette (§15) : le strict nécessaire au Pencil. -->
-          <div class="mini-palette dock" id="miniPalette" role="toolbar" aria-label="Palette rapide" hidden>
-            <span class="dock-handle" id="miniHandle" aria-hidden="true" title="Déplacer la palette">⣿</span>
-            <button class="tool" type="button" data-mini-tool="dig"><span class="tool-icon" aria-hidden="true">◡</span>Creuser</button>
-            <button class="tool" type="button" data-mini-tool="raise"><span class="tool-icon" aria-hidden="true">◠</span>Bomber</button>
-            <label class="tool-slider">Taille <output class="tool-slider-value" id="miniSizeValue"></output><input type="range" id="miniSize" min="2" max="80" step="1" value="19"></label>
-            <label class="tool-slider">Force <output class="tool-slider-value" id="miniStrengthValue"></output><input type="range" id="miniStrength" min="10" max="100" step="1" value="55"></label>
-          </div>
         </div>
+
         <footer class="stage-footer">
-          <div><strong id="designName">Dunes</strong> · graine <span id="seedLabel">2749</span> · <span id="sizeLabel">160 × 100 cm</span></div>
+          <div class="document-status"><span class="status-dot" aria-hidden="true"></span><strong id="designName">Dunes</strong><span>graine <span id="seedLabel">2749</span></span><span id="sizeLabel">160 × 100 cm</span></div>
           <div class="hint"><span class="hint-symbol" id="hintSymbol" aria-hidden="true">☀</span> <span id="hintText">Glissez sur l’œuvre pour déplacer la lumière</span></div>
+          <div class="save-status" id="saveStatus" role="status" hidden></div>
         </footer>
       </section>
+
+      <aside class="sidebar inspector-panel panel-shell" id="sidebar" aria-label="Propriétés du relief">
+        <div class="panel-titlebar inspector-heading"><div><span class="panel-kicker">Sélection</span><h2>Relief principal</h2></div><button class="icon-btn close-inspector" type="button" data-close-inspector title="Fermer"><span aria-hidden="true">×</span><span class="sr-only">Fermer</span></button></div>
+        <div class="inspector-scroll">
+          <section class="quick-controls" aria-labelledby="quickControlsTitle">
+            <div class="section-heading"><h3 id="quickControlsTitle">Contrôles essentiels</h3><span>Glisser ou utiliser les flèches</span></div>
+            <div class="knob-grid">
+              <button class="param-knob" type="button" role="slider" aria-orientation="vertical" data-control="density" aria-label="Cavités" title="Glissez vers le haut ou la droite pour augmenter"><span class="knob-dial"><span class="knob-indicator"></span></span><strong>Cavités</strong><output class="knob-value">48 %</output></button>
+              <button class="param-knob" type="button" role="slider" aria-orientation="vertical" data-control="basinScaleCm" aria-label="Échelle" title="Glissez vers le haut ou la droite pour augmenter"><span class="knob-dial"><span class="knob-indicator"></span></span><strong>Échelle</strong><output class="knob-value">52 cm</output></button>
+              <button class="param-knob" type="button" role="slider" aria-orientation="vertical" data-control="warpAmount" aria-label="Fluidité" title="Glissez vers le haut ou la droite pour augmenter"><span class="knob-dial"><span class="knob-indicator"></span></span><strong>Fluidité</strong><output class="knob-value">62 %</output></button>
+              <button class="param-knob" type="button" role="slider" aria-orientation="vertical" data-control="depth" aria-label="Profondeur" title="Glissez vers le haut ou la droite pour augmenter"><span class="knob-dial"><span class="knob-indicator"></span></span><strong>Profondeur</strong><output class="knob-value">92 %</output></button>
+            </div>
+          </section>
+          <div class="advanced-label"><span>Paramètres avancés</span><span aria-hidden="true">⌄</span></div>
+
+          <details class="inspector-section" data-inspector-section="panneau">
+            <summary>Panneau</summary>
+            <div class="control-list">
+              <label class="control"><span class="control-head"><span id="widthLabel">Largeur</span><output class="control-value" id="widthCmValue"></output></span><input type="range" id="widthCm" min="1" max="500" step="1" value="160"></label>
+              <label class="control" id="heightControl"><span class="control-head"><span>Hauteur</span><output class="control-value" id="heightCmValue"></output></span><input type="range" id="heightCm" min="1" max="200" step="1" value="100"></label>
+              <label class="control"><span class="control-head"><span>Épaisseur</span><output class="control-value" id="depthCmValue"></output></span><input type="range" id="depthCm" min="0.1" max="30" step="0.1" value="6"></label>
+            </div>
+          </details>
+
+          <details class="inspector-section" data-inspector-section="composition" open>
+            <summary>Composition</summary>
+            <div class="control-list">
+              <label class="control"><span class="control-head"><span>Taille des cavités</span><output class="control-value" id="basinScaleCmValue"></output></span><input type="range" id="basinScaleCm" min="8" max="160" step="1" value="52"></label>
+              <label class="control"><span class="control-head"><span>Densité</span><output class="control-value" id="densityValue"></output></span><input type="range" id="density" min="5" max="95" step="1" value="48"></label>
+              <label class="control"><span class="control-head"><span>Chenaux</span><output class="control-value" id="channelWeightValue"></output></span><input type="range" id="channelWeight" min="0" max="100" step="1" value="55"></label>
+              <label class="control"><span class="control-head"><span>Allongement</span><output class="control-value" id="elongationValue"></output></span><input type="range" id="elongation" min="0" max="100" step="1" value="55"></label>
+              <label class="control"><span class="control-head"><span>Orientation</span><output class="control-value" id="orientationDegValue"></output></span><input type="range" id="orientationDeg" min="0" max="180" step="1" value="22"></label>
+              <label class="control"><span class="control-head"><span>Mouvement</span><output class="control-value" id="warpAmountValue"></output></span><input type="range" id="warpAmount" min="0" max="100" step="1" value="62"></label>
+              <label class="control"><span class="control-head"><span>Irrégularité</span><output class="control-value" id="irregularityValue"></output></span><input type="range" id="irregularity" min="0" max="100" step="1" value="35"></label>
+            </div>
+          </details>
+
+          <details class="inspector-section" data-inspector-section="relief">
+            <summary>Relief &amp; matière</summary>
+            <div class="control-list">
+              <label class="switch-row" for="negative"><span>Relief négatif</span><span class="switch"><input type="checkbox" id="negative"><span aria-hidden="true"></span></span></label>
+              <label class="control"><span class="control-head"><span>Profondeur du relief</span><output class="control-value" id="depthValue"></output></span><input type="range" id="depth" min="20" max="100" step="1" value="92"></label>
+              <label class="control"><span class="control-head"><span>Épaulement</span><output class="control-value" id="shoulderValue"></output></span><input type="range" id="shoulder" min="5" max="100" step="1" value="50"></label>
+              <label class="control"><span class="control-head"><span>Douceur des arêtes</span><output class="control-value" id="softnessValue"></output></span><input type="range" id="softness" min="5" max="100" step="1" value="55"></label>
+              <label class="control"><span class="control-head"><span>Ondulation</span><output class="control-value" id="waveValue"></output></span><input type="range" id="wave" min="0" max="100" step="1" value="50"></label>
+              <label class="control"><span class="control-head"><span>Grain de surface</span><output class="control-value" id="textureValue"></output></span><input type="range" id="texture" min="0" max="100" step="1" value="30"></label>
+              <label class="control"><span class="control-head"><span>Finition</span></span><select class="select" id="finish"><option value="mat">Mat</option><option value="satine">Satiné</option><option value="brillant">Brillant</option><option value="chrome">Chrome</option></select></label>
+              <label class="color-row" for="materialColor"><span>Couleur de matière</span><input type="color" id="materialColor" value="#e8e4dc"></label>
+            </div>
+          </details>
+
+          <details class="inspector-section" data-inspector-section="lumiere">
+            <summary>Lumière &amp; présentation</summary>
+            <div class="control-list">
+              <label class="control"><span class="control-head"><span>Direction</span><output class="control-value" id="lightAngleValue"></output></span><input type="range" id="lightAngle" min="0" max="359" step="1" value="245"></label>
+              <label class="control"><span class="control-head"><span>Hauteur de lumière</span><output class="control-value" id="lightHeightValue"></output></span><input type="range" id="lightHeight" min="15" max="80" step="1" value="42"></label>
+              <label class="control"><span class="control-head"><span>Exposition</span><output class="control-value" id="exposureEvValue"></output></span><input type="range" id="exposureEv" min="-20" max="20" step="1" value="0"></label>
+              <label class="control"><span class="control-head"><span>Intensité des ombres</span><output class="control-value" id="shadowStrengthValue"></output></span><input type="range" id="shadowStrength" min="0" max="100" step="1" value="55"></label>
+              <label class="control"><span class="control-head"><span>Occlusion des cavités</span><output class="control-value" id="cavityOcclusionValue"></output></span><input type="range" id="cavityOcclusion" min="0" max="100" step="1" value="50"></label>
+              <label class="control"><span class="control-head"><span>Contraste</span><output class="control-value" id="contrastValue"></output></span><input type="range" id="contrast" min="20" max="100" step="1" value="80"></label>
+              <label class="control"><span class="control-head"><span>Halo arrière</span><output class="control-value" id="backlightValue"></output></span><input type="range" id="backlight" min="0" max="100" step="1" value="58"></label>
+              <label class="control"><span class="control-head"><span>Découpe du panneau</span></span><select class="select" id="panelLayout"><option value="none">Panneau monobloc</option><option value="2x1">2 panneaux verticaux</option><option value="2x2">4 panneaux (2 × 2)</option><option value="3x2">6 panneaux (3 × 2)</option></select></label>
+              <label class="switch-row" for="frame"><span>Cadre noir</span><span class="switch"><input type="checkbox" id="frame" checked><span aria-hidden="true"></span></span></label>
+              <label class="color-row" for="wallColor"><span>Couleur du mur</span><input type="color" id="wallColor" value="#d8d3c9"></label>
+            </div>
+          </details>
+
+          <details class="inspector-section" data-inspector-section="sculpture">
+            <summary>Sculpture locale</summary>
+            <div class="control-list"><p class="inspector-note">Choisissez Creuser, Bomber ou Lisser dans la barre au-dessus de l’œuvre, puis dessinez directement.</p><button class="btn" id="clearSculpt" type="button"><span aria-hidden="true">⌫</span> Effacer la sculpture</button></div>
+          </details>
+
+          <details class="inspector-section export-section" data-inspector-section="export">
+            <summary>Export PNG</summary>
+            <div class="control-list">
+              <label class="control" id="exportSizeControl"><span class="control-head"><span>Grand côté</span></span><select class="select" id="exportLongSide"><option value="2048">2048 px</option><option value="4096">4096 px</option><option value="custom">Sur mesure…</option></select></label>
+              <label class="control" id="exportCustomControl" hidden><span class="control-head"><span>Définition</span><output class="control-value" id="exportCustomValue"></output></span><input type="range" id="exportCustom" min="512" max="8192" step="128" value="3072"></label>
+              <label class="switch-row" for="exportTransparent" id="exportTransparentControl" hidden><span>Fond transparent</span><span class="switch"><input type="checkbox" id="exportTransparent"><span aria-hidden="true"></span></span></label>
+              <p class="export-note" id="exportNote"></p>
+              <button class="btn btn-primary full-width" id="exportRun" type="button">Exporter l’image PNG</button>
+            </div>
+          </details>
+        </div>
+      </aside>
+
+      <section class="bottom-panel panel-shell" aria-label="Calques et variations">
+        <div class="bottom-tabs" role="tablist" aria-label="Panneau inférieur">
+          <button class="bottom-tab active" type="button" role="tab" aria-selected="true" data-bottom-tab="layers">Calques</button>
+          <button class="bottom-tab" type="button" role="tab" aria-selected="false" data-bottom-tab="variations">Variations <span class="tab-badge" id="variationCount">1</span></button>
+          <button class="bottom-tab" type="button" role="tab" aria-selected="false" data-bottom-tab="history">Historique</button>
+          <button class="bottom-collapse" type="button" data-bottom-collapse title="Réduire le panneau"><span aria-hidden="true">⌄</span><span class="sr-only">Réduire le panneau</span></button>
+        </div>
+        <div class="bottom-content">
+          <div class="bottom-view active" data-bottom-view="layers" role="tabpanel">
+            <div class="layers-table">
+              <div class="layer-header"><span></span><span>Nom</span><span>Type</span><span>État</span></div>
+              <button class="layer-row active" type="button" data-layer-target="composition"><span class="layer-eye" aria-hidden="true">◉</span><span class="layer-name"><span class="layer-swatch relief-swatch" aria-hidden="true"></span><strong>Relief principal</strong></span><span>Générateur</span><span class="layer-state">Actif</span></button>
+              <button class="layer-row" type="button" data-layer-target="relief"><span class="layer-eye" aria-hidden="true">◉</span><span class="layer-name"><span class="layer-swatch material-swatch" aria-hidden="true"></span><strong>Matière minérale</strong></span><span>Apparence</span><span class="layer-state">Lié</span></button>
+              <button class="layer-row" type="button" data-layer-target="lumiere"><span class="layer-eye" aria-hidden="true">◉</span><span class="layer-name"><span class="layer-swatch light-swatch" aria-hidden="true"></span><strong>Lumière studio</strong></span><span>Éclairage</span><span class="layer-state">Lié</span></button>
+            </div>
+          </div>
+          <div class="bottom-view" data-bottom-view="variations" role="tabpanel" hidden><div class="variation-strip" id="variationStrip"><button class="variation-card active" type="button" data-variation-index="0"><span class="variation-thumb" aria-hidden="true">≈</span><span><strong>État actuel</strong><small>Point de départ</small></span></button></div></div>
+          <div class="bottom-view" data-bottom-view="history" role="tabpanel" hidden><div class="history-actions"><div><strong>Historique de sculpture</strong><span>Annule ou rétablit les gestes dessinés sur le relief.</span></div><div class="history-buttons"><button class="btn btn-compact" type="button" data-history-action="undo">↶ Annuler</button><button class="btn btn-compact" type="button" data-history-action="redo">↷ Rétablir</button></div></div></div>
+        </div>
+      </section>
+
+      <div class="mini-palette dock" id="miniPalette" role="toolbar" aria-label="Palette rapide" hidden>
+        <span class="dock-handle" id="miniHandle" aria-hidden="true">⣿</span>
+        <button class="tool" type="button" data-mini-tool="dig"><span class="tool-icon" aria-hidden="true">◡</span>Creuser</button>
+        <button class="tool" type="button" data-mini-tool="raise"><span class="tool-icon" aria-hidden="true">◠</span>Bomber</button>
+        <label class="tool-slider">Taille <output class="tool-slider-value" id="miniSizeValue"></output><input type="range" id="miniSize" min="2" max="80" step="1" value="19"></label>
+        <label class="tool-slider">Force <output class="tool-slider-value" id="miniStrengthValue"></output><input type="range" id="miniStrength" min="10" max="100" step="1" value="55"></label>
+        <label class="tool-slider">Allongement <output class="tool-slider-value" id="miniElongationValue"></output><input type="range" id="miniElongation" min="0" max="100" step="1" value="0"></label>
+        <span class="brush-preview" id="miniPreview" aria-hidden="true"><span class="brush-preview-shape" id="miniPreviewShape"></span></span>
+      </div>
     </div>
   </main>
-
   <script type="module" src="app.js"></script>
 </body>
 </html>

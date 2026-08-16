@@ -182,9 +182,14 @@ export function defaultUi() {
     activeTool: 'light',
     brushSizeCm: 12,
     brushStrength: 0.55,
+    // Brosse directionnelle (§6). `brushElongation` va de 0 — un disque — à 1,
+    // soit une ellipse de 5 pour 1 ; `brushAngle` est en degrés dans [0, 180[,
+    // une ellipse étant identique à elle-même après un demi-tour.
     brushElongation: 0,
     brushAngle: 0,
-    animate: false,
+    // Quand il est vrai, l'orientation est reprise du GESTE et `brushAngle` est
+    // ignoré : la brosse se couche dans le sens du trait.
+    brushFollowStroke: false,
     presetKey: 'dunes',
     designName: 'Dunes',
 
@@ -250,6 +255,86 @@ export function aspectOf(project) {
 
 export function isRatioLocked(project) {
   return project.canvasShape !== 'rectangle';
+}
+
+/**
+ * Taille admissible sous verrou de rapport.
+ *
+ * POURQUOI CETTE FONCTION EXISTE. Les bornes du rectangle ne sont pas
+ * symétriques — 500 cm de large pour 200 cm de haut. Le redimensionnement
+ * plafonnait CHAQUE dimension séparément : un panneau 160 × 100 verrouillé à
+ * 1,6 et tiré en largeur sortait en 500 × 200, soit un rapport de 2,5. Le
+ * verrou se rompait en silence, exactement quand l'utilisateur s'appuyait
+ * dessus. Mesuré aussi sur 160 × 100 réduit à 1 cm (rapport 1,0) et sur
+ * 100 × 180 tiré à 400 (rapport 2,0).
+ *
+ * La correction ne plafonne plus les deux côtés : elle plafonne la LARGEUR dans
+ * l'intervalle où la hauteur induite reste elle aussi dans ses bornes. Le
+ * rapport est alors conservé par construction, au seul arrondi au centimètre
+ * près.
+ *
+ * @param {string} shape        forme de toile
+ * @param {number} ratio        largeur / hauteur à préserver
+ * @param {number} widthCm      largeur souhaitée, avant bornage
+ * @returns {{widthCm:number, heightCm:number, clamped:boolean}}
+ */
+const RATIO_TOLERANCE = 0.02;
+
+export function fitLockedSize(shape, ratio, widthCm) {
+  const bounds = BOUNDS[shape] || BOUNDS.rectangle;
+  const heightBound = bounds.heightCm || bounds.widthCm;
+  if (!(ratio > 0) || !Number.isFinite(ratio)) {
+    const w = clampTo(widthCm, bounds.widthCm);
+    return { widthCm: Math.round(w), heightCm: Math.round(w), clamped: true };
+  }
+
+  // Intervalle de largeur dans lequel la HAUTEUR induite reste légale.
+  const minWidth = Math.max(bounds.widthCm.min, heightBound.min * ratio);
+  const maxWidth = Math.min(bounds.widthCm.max, heightBound.max * ratio);
+  // Un rapport peut rendre l'intervalle vide si les bornes se croisent ; on
+  // retombe alors sur la plus petite largeur légale plutôt que d'inventer.
+  const w = maxWidth < minWidth ? bounds.widthCm.min : Math.min(maxWidth, Math.max(minWidth, widthCm));
+
+  // Un rapport n'est pas toujours REPRÉSENTABLE en centimètres entiers. À 1 cm
+  // de large, 1,6 donnerait 2 × 1, soit 2,0 — 25 % d'écart. À l'autre extrême,
+  // un rapport de 143 plafonné à 500 cm donnerait 500 × 3, soit 167. Un verrou
+  // doit refuser une taille qu'il ne peut pas tenir, pas la déformer en
+  // silence.
+  //
+  // L'intervalle légal des largeurs compte au plus quelques centaines
+  // d'entiers : on les PARCOURT tous plutôt que de chercher à tâtons autour de
+  // la valeur visée. Une recherche par pas croissants, dans un sens ou dans les
+  // deux, manquait selon les cas le haut ou le bas de l'intervalle. Le balayage
+  // complet est à la fois plus simple et optimal par construction, pour un coût
+  // sans commune mesure avec le rendu qui suit.
+  const vise = Math.max(bounds.widthCm.min, Math.round(w));
+  const bas = Math.max(bounds.widthCm.min, Math.ceil(minWidth));
+  const haut = Math.max(bas, Math.floor(maxWidth));
+
+  let dansTolerance = null;
+  let moindreEcart = null;
+  for (let candidat = bas; candidat <= haut; candidat++) {
+    const hauteur = Math.round(candidat / ratio);
+    if (hauteur < heightBound.min || hauteur > heightBound.max) continue;
+    const ecart = Math.abs(candidat / hauteur - ratio) / ratio;
+    const distance = Math.abs(candidat - vise);
+
+    if (ecart <= RATIO_TOLERANCE && (!dansTolerance || distance < dansTolerance.distance)) {
+      dansTolerance = { widthCm: candidat, heightCm: hauteur, distance };
+    }
+    // Filet de sécurité : si aucune paire ne tient la tolérance, on rend la
+    // moins fausse, jamais un résultat arbitraire.
+    if (!moindreEcart || ecart < moindreEcart.ecart - 1e-12 || (Math.abs(ecart - moindreEcart.ecart) < 1e-12 && distance < moindreEcart.distance)) {
+      moindreEcart = { widthCm: candidat, heightCm: hauteur, ecart, distance };
+    }
+  }
+
+  const trouve = dansTolerance || moindreEcart || {
+    widthCm: Math.max(bounds.widthCm.min, Math.min(bounds.widthCm.max, vise)),
+    heightCm: heightBound.min,
+  };
+
+  return { ...trouve, clamped: trouve.widthCm !== Math.round(widthCm) };
 }
 
 /**

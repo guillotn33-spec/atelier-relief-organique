@@ -65,10 +65,16 @@ directement, là où un ZIP demanderait une manipulation de plus.
 | USDZ | ZIP valide, `#usda 1.0`, `def Mesh`, `points`, `normals`, `primvars:st`, `UsdPreviewSurface` |
 | rond | 12 849 sommets contre 16 641 pour le carré — rapport 0,772 |
 
-**Densité d'export.** Mesuré : 400 000 triangles donnent un USDZ de 9,3 Mo et un
-OBJ de 16 Mo, pénibles à ouvrir sur un iPad. Ramenée à 200 000, l'USDZ retombe
-sous 5 Mo et le relief reste très détaillé pour un panneau mural. L'interface
-annonce le nombre de triangles et le poids attendu.
+**Densité d'export.** ⚠ *Corrigé au lot 6 bis — ce paragraphe était faux.*
+`EXPORT_MAX_TRIANGLES` est un **budget**, pas un décompte : `buildReliefMesh`
+retient le plus petit pas de décimation entier qui tient dessous. Sur le panneau
+de 200 × 120 cm (grille canonique 641 × 385), les budgets 200 000 et 400 000
+donnent tous deux le **pas 2**, donc **122 880 triangles** et le **même fichier
+de 9,32 Mo** en USDZ (16,47 Mo en OBJ). Le « 400 000 triangles » annoncé ici
+était le budget, et l'« USDZ sous 5 Mo à 200 000 » ne s'est jamais produit.
+Passer réellement sous 5 Mo demanderait un budget inférieur à 122 880, ce qui
+ferait basculer au pas 3 et diviserait le détail par deux — arbitrage à rendre.
+L'interface annonce le nombre de triangles et le poids attendu.
 
 ## Vérifié dans le navigateur, sans rien écrire sur le disque
 
@@ -80,8 +86,8 @@ détournés — de sorte qu'aucun fichier n'a été écrit.
 |---|---|---|
 | PNG 2048 | `rectangle-200-120-cm-2048x1229.png` | 2,8 Mo, 2048 × 1229 |
 | JPEG 4096 | `rectangle-200-120-cm-4096x2458.jpg` | 577 Ko, 4096 × 2458 |
-| OBJ + MTL | `.obj` (16 Mo à 400 k) + `.mtl` (139 octets) | `mtllib` apparié |
-| USDZ | `rectangle-200-120-cm.usdz` | 9,3 Mo à 400 k, ZIP valide |
+| OBJ + MTL | `.obj` (16,47 Mo, 122 880 triangles) + `.mtl` (139 octets) | `mtllib` apparié |
+| USDZ | `rectangle-200-120-cm.usdz` | 9,32 Mo, 122 880 triangles, ZIP valide |
 
 Le MTL relu fait 139 octets et contient bien `newmtl relief_mat`, la couleur
 diffuse et l'exposant spéculaire déduits de la finition.
@@ -102,6 +108,9 @@ diffuse et l'exposant spéculaire déduits de la finition.
    est rapporté dans le panneau, pas avalé.
 
 ## Suites
+
+*Comptes du lot 6, conservés tels quels. Le lot 6 bis les a fait évoluer —
+voir `LOT6BIS.md` pour l'état courant.*
 
 Export 21/21 · Mesh 13/13 · Gestes 32/32 · Animation 4/4 · Moteur 15/15 ·
 Architecture 12/12. Bundle de production : 620 ko.

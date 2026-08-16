@@ -2,8 +2,12 @@
 //
 // L'audit du lot 0 a établi que la version 1 n'avait pas de heightmap : elle
 // recalculait un champ à la résolution du rendu du moment puis le jetait. Or §4
-// (instantané de base), §5 (négatif non destructif), §9 (mesh 3D) et §18 (export)
+// (instantané de base), §5 (négatif non destructif) et §17 (export image)
 // exigent tous « exactement » le même relief. Cette grille est cet objet.
+//
+// Elle a aussi servi au maillage 3D et à l'export USDZ/OBJ, retirés du produit :
+// l'aperçu et le PNG exporté restent les deux consommateurs, et ils partagent
+// toujours cette grille — c'est ce qui garantit qu'ils montrent le même relief.
 //
 // Propriétés tenues :
 //   • cellules CARRÉES en centimètres — c'est ce qui supprime toute notion de
@@ -11,8 +15,7 @@
 //   • grille centrée sur la toile, débordant légèrement, indépendante de la
 //     résolution d'affichage comme de la résolution d'export ;
 //   • unités de champ brutes (identiques à la v1) — la conversion vers des
-//     centimètres sur l'axe Z est faite au seul point qui en a besoin, la
-//     construction du mesh (lot 5).
+//     centimètres sur l'axe Z se fait chez le consommateur qui en a besoin.
 
 import { blurFraction, evalField as evalLegacyField, makeFieldContext as makeLegacyContext } from './legacyField.js';
 import { evalField as evalOrganicField, makeFieldContext as makeOrganicContext } from './field.js';
@@ -245,19 +248,26 @@ export function updateHeightmapRect(hm, project, layer, rectCm, options = {}) {
   blurTile(rawTile, blurTileBuf, tileW, tileH, hm.blurRadius);
 
   // Seule la zone intérieure est exacte : le flou de la tuile y a vu tous ses voisins.
-  let sum = hm.sum;
   for (let r = r0; r < r1; r++) {
     const dst = r * hm.cols;
     const src = (r - er0) * tileW - ec0;
     for (let c = c0; c < c1; c++) {
-      sum -= hm.h[dst + c];
-      const value = blurTileBuf[src + c];
-      hm.h[dst + c] = value;
+      hm.h[dst + c] = blurTileBuf[src + c];
       hm.raw[dst + c] = rawTile[src + c];
-      sum += value;
     }
   }
-  hm.sum = sum;
+  // Les bornes sont RECALCULÉES sur toute la grille, pas mises à jour au fil de
+  // l'eau. `sum` se maintient par différence, `min` et `max` non : un point qui
+  // quittait l'extrême obligeait de toute façon à tout relire.
+  //
+  // Ne pas le faire est un défaut VISIBLE : `shadeParams` reçoit
+  // `hm.max − hm.min` comme amplitude, et c'est elle qui règle la profondeur
+  // d'occlusion. Après un trait « bomber », les bornes stockées restaient celles
+  // de la construction et les fonds de cavité s'éclaircissaient de 8,9 %.
+  // (Le défaut a d'abord été trouvé sur le maillage exporté, qui sortait à
+  // 6,98 cm pour 6 cm déclarés ; l'export 3D a été retiré du produit depuis,
+  // l'invariant est resté.)
+  recomputeStats(hm);
   // La surface de référence dépend du relief : la sculpture la déplace aussi.
   // Elle est très basse fréquence, donc peu coûteuse à refaire en entier.
   hm.ao = buildAoField(hm, hm.aoRadius || 24);
@@ -280,10 +290,34 @@ export function updateHeightmapRect(hm, project, layer, rectCm, options = {}) {
 
 const AO_TARGET_RADIUS = 6; // rayon visé sur la grille décimée
 
-export function buildAoField(hm, radiusCells) {
-  const k = Math.max(1, Math.ceil(radiusCells / AO_TARGET_RADIUS));
-  const cols = Math.max(2, Math.ceil(hm.cols / k));
-  const rows = Math.max(2, Math.ceil(hm.rows / k));
+// Nombre minimal de cellules sur chaque axe de la grille décimée.
+//
+// Sans ce plancher, un panneau étroit avec de grandes cavités produisait une
+// décimation telle que la grille tombait à DEUX lignes, dont la seconde ne
+// couvrait aucune cellule réelle : le repli `n ? sum / n : 0` la laissait à
+// zéro et le flou la mélangeait ensuite à la vraie surface. Mesuré, écart entre
+// la moyenne de la référence et celle du relief : 25,9 % de l'amplitude sur un
+// 200 × 30 à grandes cavités, 14,6 % sur un 300 × 18. Tout le terme d'occlusion
+// de `shade.js` repose sur ce champ.
+//
+// Exporté pour que `tests/heightmap.mjs` puisse éprouver l'invariant plutôt que
+// de recopier la valeur.
+export const AO_MIN_CELLS = 6;
+
+export function buildAoField(hm, requestedRadiusCells) {
+  // Un rayon de référence plus grand que le panneau n'a pas de sens : la
+  // référence doit alors dégénérer vers la moyenne du panneau. Sans ce
+  // plafond, le flou à réplication de bord la tirait vers les valeurs de
+  // bordure — 12,3 % d'écart mesuré sur un carré de 120 cm à grandes cavités.
+  const radiusCells = Math.min(requestedRadiusCells, Math.min(hm.cols, hm.rows) / 2);
+
+  // La décimation est bornée par la taille de la grille, pas seulement par le
+  // rayon voulu : mieux vaut un noyau plus large sur une grille correcte qu'une
+  // grille dégénérée.
+  const kMax = Math.max(1, Math.floor(Math.min(hm.cols, hm.rows) / AO_MIN_CELLS));
+  const k = Math.min(kMax, Math.max(1, Math.ceil(radiusCells / AO_TARGET_RADIUS)));
+  const cols = Math.ceil(hm.cols / k);
+  const rows = Math.ceil(hm.rows / k);
   const small = new Float32Array(cols * rows);
 
   // Moyenne de bloc plutôt qu'un simple prélèvement : sans elle, le repliement

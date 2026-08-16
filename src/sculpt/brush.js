@@ -1,8 +1,14 @@
 // Brosse de sculpture — travaille en centimètres sur le calque ancré (§6, amendement D).
 //
 // La brosse est elliptique et orientable par construction : à `elongation = 0` elle
-// est un disque et reproduit exactement le comportement de la version 1. L'interface
-// des paramètres allongement/angle est branchée au lot 3 ; le moteur les accepte déjà.
+// est un disque et reproduit exactement le comportement de la version 1.
+//
+// L'en-tête annonçait jusqu'au lot 7 que l'interface de ces paramètres était
+// « branchée au lot 3 ». Elle ne l'a jamais été : `brushElongation` et
+// `brushAngle` existaient dans le modèle, `stampAt` les transmettait, et rien
+// ne les écrivait — la brosse est restée un disque pendant six lots. Les
+// commandes existent depuis le lot 7 (§6), avec un aperçu qui dessine cette
+// ellipse-ci et non une illustration.
 
 import { clamp } from '../core/math.js';
 
@@ -13,6 +19,33 @@ const TOOLS = new Set(['warp', 'dig', 'raise', 'smooth', 'erase']);
 // fichier où `1.6` désignait partout ailleurs le rapport d'image. Le nommer
 // interdit de le confondre avec un rapport lors d'une relecture ou d'un audit.
 const DOSE_GAIN = 1.6;
+
+// Rapport long/court de l'ellipse à l'allongement maximal (§6). Cinq contre un
+// donne un trait franchement directionnel sans devenir une lame : au-delà, le
+// petit axe passe sous la maille du calque sur une brosse fine et le trait se
+// met à crénerer.
+export const MAX_BRUSH_ASPECT = 5;
+
+/**
+ * Demi-axes de l'ellipse, en cm, pour un rayon et un allongement donnés.
+ *
+ * L'AIRE EST CONSERVÉE : `a × b = radiusCm²` quel que soit l'allongement. La
+ * première écriture — `a = r·s`, `b = r/√s` avec `s = 1 + 2,2·e` — faisait
+ * croître l'aire de 79 % entre le disque et l'allongement maximal, alors que le
+ * commentaire annonçait le contraire. La dose déposée par coup aurait suivi, et
+ * allonger la brosse aurait creusé plus fort sans que rien ne le dise.
+ *
+ * Le rapport vaut exactement `1 + e·(MAX_BRUSH_ASPECT − 1)` : « allongement
+ * 50 % » se lit donc « ellipse 3 pour 1 », ce que l'interface affiche.
+ *
+ * Exporté parce que l'aperçu de l'interface doit dessiner LA MÊME ellipse que
+ * celle qui creuse — la redessiner à l'estime serait un mensonge à l'écran.
+ */
+export function brushAxes(radiusCm, elongation = 0) {
+  const aspect = 1 + clamp(elongation, 0, 1) * (MAX_BRUSH_ASPECT - 1);
+  const root = Math.sqrt(aspect);
+  return { a: radiusCm * root, b: radiusCm / root, aspect };
+}
 
 function smoothCell(field, index, cols, rows, factor) {
   const x = index % cols;
@@ -51,10 +84,8 @@ export function stamp(layer, options) {
   const dose = Math.min(0.12, (travelCm / radiusCm) * 0.96 + (first ? 0.02 : 0));
   if (tool !== 'warp' && dose === 0) return null;
 
-  // Ellipse : `a` s'allonge, `b` se resserre, l'aire reste comparable.
-  const stretch = 1 + elongation * 2.2;
-  const a = radiusCm * stretch;
-  const b = radiusCm / Math.sqrt(stretch);
+  // Ellipse : `a` s'allonge, `b` se resserre, l'aire est conservée exactement.
+  const { a, b } = brushAxes(radiusCm, elongation);
   const theta = (angleDeg * Math.PI) / 180;
   const ca = Math.cos(theta);
   const sa = Math.sin(theta);

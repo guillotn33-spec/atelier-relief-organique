@@ -79,9 +79,38 @@ export class Dock {
     // La barre est en position fixe, la toile défile : sans réancrage au
     // défilement, une barre aimantée à un bord de la TOILE s'en détacherait dès
     // le premier mouvement de page.
-    window.addEventListener('resize', () => this.apply());
-    window.addEventListener('scroll', () => this.apply(), { passive: true });
+    // Ces deux écouteurs vivent sur `window` et survivent au retrait du nœud de
+    // la barre : sans `destroy`, chaque changement de projet en laissait quatre
+    // de plus — deux par barre — plus le guide d'aimantation ajouté au `body`.
+    this.onWindowChange = () => this.apply();
+    window.addEventListener('resize', this.onWindowChange);
+    window.addEventListener('scroll', this.onWindowChange, { passive: true });
+
+    // La barre suit l'ŒUVRE, pas elle-même.
+    //
+    // Une barre aimantée à un bord de la toile doit suivre ce bord. Depuis que
+    // l'œuvre est recadrée après la première mise en page, la barre s'accrochait
+    // au bas d'une œuvre encore trop haute, se faisait rabattre contre le bas de
+    // la fenêtre — et n'en repartait jamais. Mesuré : barre à 615 px alors que
+    // le bas de l'œuvre était à 483.
+    //
+    // NE PAS S'OBSERVER SOI-MÊME. Cela a été essayé, pour rattraper les
+    // variations tardives de sa propre hauteur, et cela FIGE LA PAGE : la barre
+    // est en position fixe sans largeur explicite, sa largeur utilisable vaut
+    // « fenêtre − left », donc écrire `left` change sa taille, ce qui relance
+    // l'observateur, qui réécrit `left`. La boucle est immédiate. Les
+    // variations tardives de hauteur sont traitées là où on les connaît : par
+    // un replacement explicite après le remplissage des libellés.
+    this.sizeObserver = new ResizeObserver(() => this.apply());
+    if (this.artWrap) this.sizeObserver.observe(this.artWrap);
     this.apply();
+  }
+
+  destroy() {
+    window.removeEventListener('resize', this.onWindowChange);
+    window.removeEventListener('scroll', this.onWindowChange, { passive: true });
+    this.sizeObserver?.disconnect();
+    this.guide.remove();
   }
 
   setVisible(visible) {

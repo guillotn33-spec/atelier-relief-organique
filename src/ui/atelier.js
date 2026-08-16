@@ -7,71 +7,45 @@
 // curseur de lumière.
 
 import { clamp } from '../core/math.js';
-import { BOUNDS, PRESETS, applyPreset, aspectOf, baseGeometryOf, captureBase } from '../core/project.js';
+import { BOUNDS, PRESETS, applyPreset, aspectOf, baseGeometryOf, captureBase, fitLockedSize } from '../core/project.js';
 import { GestureManager, ROLE } from './gestures.js';
 import { Viewport } from './viewport.js';
 import { Dock } from './dock.js';
-import { Viewer3D } from '../render3d/viewer.js';
-import { encode, fileNameFor, outputSizeFor, renderForExport } from '../export/image.js';
-import { EXPORT_MAX_TRIANGLES, exportObj, exportUsdz, fileBaseFor } from '../export/model.js';
 import { nextVariation } from '../geometry/variation.js';
 import { buildHeightmap, updateHeightmapRect } from '../geometry/heightmap.js';
-import { SwellAnimator } from '../geometry/animator.js';
 import { createRenderCache, renderFull, renderPatch } from '../render2d/renderer.js';
-import { stamp } from '../sculpt/brush.js';
+import { brushAxes, stamp } from '../sculpt/brush.js';
+import { DirectionTracker } from '../sculpt/direction.js';
 import { SculptLayer } from '../sculpt/layer.js';
-import * as db from '../persistence/db.js';
+import { SculptHistory } from '../sculpt/history.js';
+import { ProjectStore } from './persistence.js';
+import { BINDINGS, TOOL_META } from './bindings.js';
+import { ExportPanel } from './exportPanel.js';
+import { ProWorkspace } from './proWorkspace.js';
 
-const TOOL_META = {
-  light: { icon: '☀', hint: 'Glissez sur l’œuvre pour déplacer la lumière' },
-  warp: { icon: '〰', hint: 'Poussez le motif dans le sens du geste' },
-  dig: { icon: '◡', hint: 'Glissez pour creuser la matière — la pression du stylet module la force' },
-  raise: { icon: '◠', hint: 'Glissez pour bomber la matière — la pression du stylet module la force' },
-  smooth: { icon: '≋', hint: 'Glissez pour adoucir la sculpture' },
-  erase: { icon: '⌫', hint: 'Glissez pour retrouver le motif d’origine' },
-};
-
-// `scope` décide de ce qu'il faut refaire : 'size' redimensionne la toile,
-// 'geometry' reconstruit la heightmap, 'shading' se contente de réombrer.
-const BINDINGS = {
-  widthCm: { scope: 'size', read: (p) => p.widthCm, write: (p, v) => { p.widthCm = v; }, format: (v) => `${v} cm` },
-  heightCm: { scope: 'size', read: (p) => p.heightCm, write: (p, v) => { p.heightCm = v; }, format: (v) => `${v} cm` },
-  depthCm: { scope: 'meta', read: (p) => p.depthCm, write: (p, v) => { p.depthCm = v; }, format: (v) => `${v} cm` },
-
-  basinScaleCm: { scope: 'geometry', read: (p) => Math.round(p.geometry.basinScaleCm), write: (p, v) => { p.geometry.basinScaleCm = v; }, format: (v) => `${v} cm` },
-  density: { scope: 'geometry', read: (p) => Math.round(p.geometry.density * 100), write: (p, v) => { p.geometry.density = v / 100; }, format: (v) => `${v} %` },
-  channelWeight: { scope: 'geometry', read: (p) => Math.round(p.geometry.channelWeight * 100), write: (p, v) => { p.geometry.channelWeight = v / 100; }, format: (v) => `${v} %` },
-  elongation: { scope: 'geometry', read: (p) => Math.round(p.geometry.elongation * 100), write: (p, v) => { p.geometry.elongation = v / 100; }, format: (v) => `${v} %` },
-  orientationDeg: { scope: 'geometry', read: (p) => Math.round(p.geometry.orientationDeg), write: (p, v) => { p.geometry.orientationDeg = v; }, format: (v) => `${v}°` },
-  warpAmount: { scope: 'geometry', read: (p) => Math.round(p.geometry.warpAmount * 100), write: (p, v) => { p.geometry.warpAmount = v / 100; }, format: (v) => `${v} %` },
-  irregularity: { scope: 'geometry', read: (p) => Math.round(p.geometry.irregularity * 100), write: (p, v) => { p.geometry.irregularity = v / 100; }, format: (v) => `${v} %` },
-  depth: { scope: 'geometry', read: (p) => Math.round(p.geometry.depth * 100), write: (p, v) => { p.geometry.depth = v / 100; }, format: (v) => `${v} %` },
-  shoulder: { scope: 'geometry', read: (p) => Math.round(p.geometry.shoulder * 100), write: (p, v) => { p.geometry.shoulder = v / 100; }, format: (v) => `${v} %` },
-  softness: { scope: 'geometry', read: (p) => Math.round(p.geometry.softness * 100), write: (p, v) => { p.geometry.softness = v / 100; }, format: (v) => `${v} %` },
-  wave: { scope: 'geometry', read: (p) => Math.round(p.geometry.wave * 100), write: (p, v) => { p.geometry.wave = v / 100; }, format: (v) => `${v} %` },
-  negative: { scope: 'geometry', kind: 'checkbox', read: (p) => p.geometry.negative, write: (p, v) => { p.geometry.negative = v; } },
-
-  texture: { scope: 'shading', read: (p) => Math.round(p.material.texture * 100), write: (p, v) => { p.material.texture = v / 100; }, format: (v) => `${v} %` },
-  materialColor: { scope: 'shading', kind: 'color', read: (p) => p.material.color, write: (p, v) => { p.material.color = v; } },
-
-  exposureEv: { scope: 'shading', read: (p) => Math.round((p.lighting.exposureEv || 0) * 10), write: (p, v) => { p.lighting.exposureEv = v / 10; }, format: (v) => `${(v / 10).toFixed(1)} EV` },
-  shadowStrength: { scope: 'shading', read: (p) => Math.round(p.lighting.shadowStrength * 100), write: (p, v) => { p.lighting.shadowStrength = v / 100; }, format: (v) => `${v} %` },
-  cavityOcclusion: { scope: 'shading', read: (p) => Math.round(p.lighting.cavityOcclusion * 100), write: (p, v) => { p.lighting.cavityOcclusion = v / 100; }, format: (v) => `${v} %` },
-  finish: { scope: 'shading', kind: 'select', read: (p) => p.material.finish, write: (p, v) => { p.material.finish = v; } },
-
-  lightAngle: { scope: 'shading', read: (p) => p.lighting.angle, write: (p, v) => { p.lighting.angle = v; }, format: (v) => `${v}°` },
-  lightHeight: { scope: 'shading', read: (p) => p.lighting.height, write: (p, v) => { p.lighting.height = v; }, format: (v) => `${v}°` },
-  contrast: { scope: 'shading', read: (p) => Math.round(p.lighting.contrast * 100), write: (p, v) => { p.lighting.contrast = v / 100; }, format: (v) => `${v} %` },
-  backlight: { scope: 'shading', read: (p) => Math.round(p.lighting.backlight * 100), write: (p, v) => { p.lighting.backlight = v / 100; }, format: (v) => `${v} %` },
-
-  panelLayout: { scope: 'shading', kind: 'select', read: (p) => p.presentation.panelLayout, write: (p, v) => { p.presentation.panelLayout = v; } },
-  frame: { scope: 'shading', kind: 'checkbox', read: (p) => p.presentation.frame, write: (p, v) => { p.presentation.frame = v; } },
-  wallColor: { scope: 'shading', kind: 'color', read: (p) => p.presentation.wallColor, write: (p, v) => { p.presentation.wallColor = v; } },
-};
+// Miroir de `.art-wrap { width: min(100%, 1080px) }`. Nommé plutôt que recopié
+// nu : une valeur en pixels perdue dans un calcul se relit comme une marge.
+const ART_MAX_WIDTH_PX = 1080;
 
 export class Atelier {
   constructor(root, { project, layer, onNewProject }) {
     this.root = root;
+    // UN SEUL INTERRUPTEUR POUR TOUS LES ÉCOUTEURS.
+    //
+    // Les éléments du document — barre d'outils, boutons, curseurs — SURVIVENT
+    // au changement de projet : c'est le même `#atelier` qui sert à l'atelier
+    // suivant. Chaque atelier construit y reposait donc ses écouteurs sans que
+    // les précédents ne retirent les leurs, et chacun restait refermé sur SON
+    // projet, désormais périmé.
+    //
+    // Mesuré : après l'ouverture d'un second projet dans la même page, un clic
+    // sur « Exporter » produisait DEUX fichiers — le bon, et un second aux
+    // dimensions de l'ancien projet. Le reste dormait derrière.
+    //
+    // `AbortController` retire tout d'un coup dans `destroy`, sans registre à
+    // tenir à jour ni risque d'en oublier un.
+    this.listeners = new AbortController();
+    this.signal = this.listeners.signal;
     this.project = project;
     this.layer = layer || SculptLayer.forCanvas(project.widthCm, project.heightCm);
     this.onNewProject = onNewProject;
@@ -84,11 +58,22 @@ export class Atelier {
     this.designName = root.querySelector('#designName');
     this.sizeLabel = root.querySelector('#sizeLabel');
     this.hintText = root.querySelector('#hintText');
+    this.store = new ProjectStore({
+      statusElement: root.querySelector('#saveStatus'),
+      // Le projet est RELU à chaque écriture : choisir un préréglage remplace
+      // `this.project`, et une référence figée enregistrerait l'ancien.
+      lire: () => ({ project: this.project, layer: this.layer }),
+    });
     this.hintSymbol = root.querySelector('#hintSymbol');
     this.undoBtn = root.querySelector('#undoBtn');
     this.redoBtn = root.querySelector('#redoBtn');
     this.brushSize = root.querySelector('#brushSize');
     this.brushStrength = root.querySelector('#brushStrength');
+    this.brushElongation = root.querySelector('#brushElongation');
+    this.brushAngle = root.querySelector('#brushAngle');
+    this.brushFollow = root.querySelector('#brushFollow');
+    this.brushGhost = null;
+    this.brushGhostTimer = 0;
     this.heightControl = root.querySelector('#heightControl');
     this.widthLabel = root.querySelector('#widthLabel');
 
@@ -101,8 +86,14 @@ export class Atelier {
     this.hm = null;
     this.renderToken = 0;
 
-    this.undoStack = [];
-    this.redoStack = [];
+    this.history = new SculptHistory({
+      lireCalque: () => this.layer,
+      boutons: { undo: this.undoBtn, redo: this.redoBtn },
+      onRestore: () => {
+        this.rebuild();
+        this.store.scheduleSculpt();
+      },
+    });
     this.stroke = null;
     this.strokeDirty = null;
     this.patchQueued = false;
@@ -111,19 +102,11 @@ export class Atelier {
     // Vrai dès qu'un geste occupe l'atelier, quel que soit son rôle.
     this.gestureActive = false;
     this.resize = null;
-    // Vue courante. La sculpture reste l'affaire de la 2D : en volume, l'œuvre
-    // se regarde et s'exporte. Le dire est plus honnête que de proposer un
-    // pinceau qui tomberait à côté.
-    this.view = '2d';
-    this.viewer3d = null;
+    // L'application finale est volontairement 2D : l'aperçu et le PNG partagent
+    // la même heightmap, sans charger un second moteur de visualisation.
 
-    // Qualité de départ de l'animation : 0,22 et non 0,45.
-    //
-    // Mesuré sur ce poste, panneau 200 × 120 cm : une image coûte 70,9 ms à
-    // qualité 0,45 (14 im/s) contre 14,0 ms à 0,18 (71 im/s). Démarrer à 0,45
-    // faisait passer la première seconde d'animation à 14 im/s avant que la
-    // boucle adaptative ne descende. On démarre donc déjà bas.
-    this.anim = { enabled: false, raf: 0, canvas: null, cache: null, animator: null, animatorQuality: 0, quality: 0.45, lastTs: 0, avg: 0 };
+    // Produit statique : aucune boucle d'animation ne concurrence les gestes ou
+    // le rendu. L'adaptateur garde les appels historiques sans charger le code.
 
     this.saveProjectTimer = 0;
     this.saveSculptTimer = 0;
@@ -131,6 +114,8 @@ export class Atelier {
     this.viewport = new Viewport(this.artWrap, this.stage, {
       onChange: () => {
         this.project.ui.viewport = this.viewport.serialize();
+        const zoomReadout = this.root.querySelector('#zoomReadout');
+        if (zoomReadout) zoomReadout.textContent = `${Math.round(this.viewport.zoom * 100)} %`;
         this.scheduleSaveProject();
       },
     });
@@ -141,24 +126,72 @@ export class Atelier {
     this.bindGestures();
     this.bindResizeHandle();
     this.bindDocks();
-    this.bindExport();
+    this.exportPanel = new ExportPanel(root, {
+      lire: () => ({ project: this.project, hm: this.hm }),
+      rendering: this.rendering,
+      signal: this.signal,
+    });
+    this.proWorkspace = new ProWorkspace(root, {
+      lire: () => this.project,
+      onRestoreVariation: (snapshot) => {
+        this.project.geometry = snapshot.geometry;
+        this.project.ui.designName = snapshot.designName;
+        this.project.ui.presetKey = snapshot.presetKey;
+        this.syncControlsFromProject();
+        this.rebuild();
+        this.scheduleSaveProject();
+      },
+      onWorkspaceMode: (mode) => {
+        if (mode === 'sculpture') {
+          this.setTool('dig');
+          this.proWorkspace.openInspector('sculpture');
+        } else if (mode === 'presentation') {
+          this.setTool('light');
+          this.proWorkspace.openInspector('lumiere');
+        } else {
+          this.setTool('light');
+          this.proWorkspace.openInspector('composition');
+        }
+        this.scheduleSaveProject();
+      },
+    });
     this.bindMisc();
 
     this.syncControlsFromProject();
     this.applyShapeToDom();
     this.rebuild();
 
+    // Les barres se placent d'après leur taille MESURÉE, or `bindDocks` a couru
+    // avant que `syncControlsFromProject` ne remplisse les valeurs affichées :
+    // la barre d'outils était alors plus courte de 13 px qu'elle ne le serait,
+    // et son bord bas finissait 9 px sous la fenêtre. On la replace une fois le
+    // contenu définitif en place.
+    this.toolbarDock?.apply();
+    this.miniDock?.apply();
+
     this.resizeTimer = 0;
     this.observer = new ResizeObserver(() => {
+      // Le cadrage est immédiat — il ne coûte que deux lectures de boîte — et
+      // seul le rendu attend. Le différer aurait laissé l'œuvre déborder
+      // pendant 120 ms à chaque changement de taille de fenêtre.
+      this.fitArtWrap();
       clearTimeout(this.resizeTimer);
       // Simple changement de taille d'affichage : le relief ne change pas,
       // seule la résolution de sortie est refaite.
       this.resizeTimer = setTimeout(() => {
         this.render();
-        this.refresh3d();
       }, 120);
     });
-    this.observer.observe(this.artWrap);
+    // On observe la SCÈNE, pas l'œuvre : observer l'œuvre alors qu'on la
+    // redimensionne soi-même ferait une boucle de rétroaction.
+    this.observer.observe(this.stage);
+
+    // `pagehide` plutôt que `beforeunload` : sur iOS c'est le seul des deux qui
+    // se déclenche de façon fiable quand Safari met l'onglet de côté.
+    this.onWindow('pagehide', () => this.flushSaves());
+    this.onWindow('visibilitychange', () => {
+      if (document.hidden) this.flushSaves();
+    });
   }
 
   // ---- Liaison des contrôles ----
@@ -168,17 +201,32 @@ export class Atelier {
       const el = this.controls[id];
       if (!el) continue;
       const eventName = binding.kind === 'select' || binding.kind === 'checkbox' || binding.kind === 'color' ? 'change' : 'input';
-      el.addEventListener(eventName, () => {
+      this.ecouter(el, eventName, () => {
         const raw = binding.kind === 'checkbox' ? el.checked : binding.kind === 'color' || binding.kind === 'select' ? el.value : Number(el.value);
         this.applyChange(id, binding, raw);
       });
     }
 
-    for (const el of [this.brushSize, this.brushStrength]) {
-      el.addEventListener('input', () => {
+    for (const el of [this.brushSize, this.brushStrength, this.brushElongation, this.brushAngle]) {
+      if (!el) continue;
+      this.ecouter(el, 'input', () => {
         this.project.ui.brushSizeCm = Number(this.brushSize.value);
         this.project.ui.brushStrength = Number(this.brushStrength.value) / 100;
+        this.project.ui.brushElongation = Number(this.brushElongation.value) / 100;
+        this.project.ui.brushAngle = Number(this.brushAngle.value);
         this.updateBrushDisplays();
+        // Trois réglages sur quatre ne se voient nulle part avant le premier
+        // trait : on montre l'empreinte réelle le temps du réglage.
+        if (el !== this.brushStrength) this.flashBrushGhost();
+        this.scheduleSaveProject();
+      });
+    }
+
+    if (this.brushFollow) {
+      this.ecouter(this.brushFollow, 'change', () => {
+        this.project.ui.brushFollowStroke = this.brushFollow.checked;
+        this.updateBrushDisplays();
+        this.flashBrushGhost();
         this.scheduleSaveProject();
       });
     }
@@ -217,6 +265,9 @@ export class Atelier {
     }
     this.brushSize.value = String(this.project.ui.brushSizeCm);
     this.brushStrength.value = String(Math.round(this.project.ui.brushStrength * 100));
+    if (this.brushElongation) this.brushElongation.value = String(Math.round((this.project.ui.brushElongation || 0) * 100));
+    if (this.brushAngle) this.brushAngle.value = String(Math.round(this.project.ui.brushAngle || 0));
+    if (this.brushFollow) this.brushFollow.checked = !!this.project.ui.brushFollowStroke;
     this.setTool(this.project.ui.activeTool || 'light');
     this.root.querySelectorAll('.preset').forEach((button) => {
       button.classList.toggle('active', button.dataset.preset === this.project.ui.presetKey);
@@ -225,6 +276,7 @@ export class Atelier {
     this.updateBrushDisplays();
     this.refreshBaseButton();
     this.syncMiniPalette();
+    this.proWorkspace?.sync();
   }
 
   updateControlDisplays() {
@@ -250,16 +302,106 @@ export class Atelier {
     const strengthOut = this.root.querySelector('#brushStrengthValue');
     if (sizeOut) sizeOut.value = `${this.brushSize.value} cm`;
     if (strengthOut) strengthOut.value = `${this.brushStrength.value} %`;
-    for (const el of [this.brushSize, this.brushStrength]) {
+
+    const suit = !!this.project.ui.brushFollowStroke;
+    const { aspect } = brushAxes(1, this.project.ui.brushElongation || 0);
+    const elongationOut = this.root.querySelector('#brushElongationValue');
+    const angleOut = this.root.querySelector('#brushAngleValue');
+    // Le rapport est plus parlant qu'un pourcentage : « 3,0 : 1 » se lit, « 50 % »
+    // demande de connaître la formule.
+    if (elongationOut) elongationOut.value = aspect < 1.02 ? 'ronde' : `${aspect.toFixed(1).replace('.', ',')} : 1`;
+    if (angleOut) angleOut.value = suit ? 'du geste' : `${this.brushAngle.value}°`;
+
+    const angleField = this.root.querySelector('#brushAngleField');
+    if (angleField) angleField.classList.toggle('is-disabled', suit);
+    if (this.brushAngle) this.brushAngle.disabled = suit;
+
+    this.paintBrushPreview('#brushPreviewShape');
+    this.paintBrushPreview('#miniPreviewShape');
+
+    for (const el of [this.brushSize, this.brushStrength, this.brushElongation, this.brushAngle]) {
+      if (!el) continue;
       const min = Number(el.min);
       const max = Number(el.max);
       el.style.setProperty('--range', (((Number(el.value) - min) / (max - min)) * 100).toFixed(2) + '%');
     }
+    this.syncMiniPalette();
+  }
+
+  /**
+   * Dessine l'aperçu de brosse. Les facteurs d'échelle viennent de `brushAxes`,
+   * la fonction que le moteur emploie : la pastille montre l'ellipse qui
+   * creusera, et non une approximation dessinée à côté.
+   */
+  paintBrushPreview(selector) {
+    const el = this.root.querySelector(selector);
+    if (!el) return;
+    const { a, b } = brushAxes(1, this.project.ui.brushElongation || 0);
+    const suit = !!this.project.ui.brushFollowStroke;
+    el.style.setProperty('--brush-scale-x', a.toFixed(4));
+    el.style.setProperty('--brush-scale-y', b.toFixed(4));
+    // En mode « suit le tracé », l'aperçu se met à plat : l'angle n'est plus un
+    // réglage, il vient du geste, et afficher un angle figé mentirait.
+    el.style.setProperty('--brush-angle', `${suit ? 0 : this.project.ui.brushAngle || 0}deg`);
+  }
+
+  /**
+   * Montre l'empreinte réelle de la brosse au centre de l'œuvre, le temps du
+   * réglage. Le fantôme est dimensionné en CENTIMÈTRES convertis en pixels par
+   * l'échelle d'affichage courante : ce qu'on voit est ce que la brosse couvre.
+   */
+  flashBrushGhost() {
+    if (!this.artWrap) return;
+    if (!this.brushGhost) {
+      this.brushGhost = document.createElement('div');
+      this.brushGhost.className = 'brush-ghost';
+      this.artWrap.append(this.brushGhost);
+    }
+    const rect = this.artWrap.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const pxParCm = rect.width / this.project.widthCm;
+    const { a, b } = brushAxes(this.project.ui.brushSizeCm, this.project.ui.brushElongation || 0);
+    const suit = !!this.project.ui.brushFollowStroke;
+    const angle = suit ? 0 : this.project.ui.brushAngle || 0;
+    const w = 2 * a * pxParCm;
+    const h = 2 * b * pxParCm;
+    this.brushGhost.style.width = `${w.toFixed(1)}px`;
+    this.brushGhost.style.height = `${h.toFixed(1)}px`;
+    this.brushGhost.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
+    this.brushGhost.classList.add('show');
+    clearTimeout(this.brushGhostTimer);
+    this.brushGhostTimer = setTimeout(() => this.brushGhost && this.brushGhost.classList.remove('show'), 900);
+  }
+
+  /**
+   * Cale l'œuvre dans la scène en respectant SES DEUX bords.
+   *
+   * `.art-wrap` porte `width: min(100%, 1080px)` et `aspect-ratio` : sa hauteur
+   * se déduit donc de sa largeur, et le `max-height: 100%` prévu pour la borner
+   * n'est pas honoré — mesuré 978 × 612 dans une scène de 510 px de haut, soit
+   * une œuvre dont le bas sortait de la fenêtre. On calcule donc la largeur
+   * utile depuis la scène RÉELLEMENT mesurée : la plus petite des deux
+   * contraintes gagne, et le rapport de la toile est préservé dans tous les cas.
+   */
+  fitArtWrap() {
+    if (!this.stage) return;
+    const aspect = aspectOf(this.project) || 1;
+    // `clientWidth`/`clientHeight` excluent la bordure mais PAS le rembourrage :
+    // on le retranche, sinon l'œuvre déborderait exactement de sa marge.
+    const style = getComputedStyle(this.stage);
+    const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    const dispoW = Math.max(1, this.stage.clientWidth - padX);
+    const dispoH = Math.max(1, this.stage.clientHeight - padY);
+
+    const largeur = Math.min(dispoW, dispoH * aspect, ART_MAX_WIDTH_PX);
+    this.artWrap.style.width = `${Math.floor(largeur)}px`;
   }
 
   applyShapeToDom() {
     const aspect = aspectOf(this.project);
     this.artWrap.style.setProperty('--canvas-aspect', String(aspect));
+    this.fitArtWrap();
     this.artWrap.dataset.shape = this.project.canvasShape;
     const shapeLocked = this.project.canvasShape !== 'rectangle';
     if (this.heightControl) this.heightControl.hidden = shapeLocked;
@@ -274,7 +416,7 @@ export class Atelier {
     }
     // La transparence d'export ne concerne que le disque : le panneau d'export
     // doit suivre un changement de forme.
-    if (this.exportFormat) this.refreshExportPanel();
+    if (this.exportPanel) this.exportPanel.refresh();
   }
 
   updateEnvironment() {
@@ -320,9 +462,7 @@ export class Atelier {
       if (token !== this.renderToken) return;
       this.hm = buildHeightmap(this.project, this.layer);
       this.render();
-      this.refresh3d();
       this.rendering.classList.remove('show');
-      if (this.anim.enabled) this.restartAnim();
     });
   }
 
@@ -332,12 +472,6 @@ export class Atelier {
     const { outW, outH } = this.outputSize();
     this.updateEnvironment();
     renderFull(this.canvas, this.project, this.hm, outW, outH, this.cache);
-    // La 3D partage la MÊME heightmap : un changement de matière ou de lumière
-    // n'a pas à reconstruire le mesh, seulement à réappliquer l'apparence.
-    if (this.view === '3d' && this.viewer3d) {
-      this.viewer3d.setAppearance(this.project);
-      this.viewer3d.render();
-    }
     this.updateControlDisplays();
   }
 
@@ -357,14 +491,14 @@ export class Atelier {
 
   bindTools() {
     this.root.querySelectorAll('.tool[data-tool]').forEach((button) => {
-      button.addEventListener('click', () => {
+      this.ecouter(button, 'click', () => {
         this.setTool(button.dataset.tool);
         this.scheduleSaveProject();
       });
     });
 
-    this.undoBtn.addEventListener('click', () => this.undo());
-    this.redoBtn.addEventListener('click', () => this.redo());
+    this.ecouter(this.undoBtn, 'click', () => this.history.undo());
+    this.ecouter(this.redoBtn, 'click', () => this.history.redo());
   }
 
   setTool(tool) {
@@ -395,41 +529,20 @@ export class Atelier {
         this.gestureActive = role !== ROLE.NONE;
       },
       onSculptStart: (p) => {
-        this.pushUndo();
+        this.history.push();
         this.beginStroke(p);
       },
       onSculptMove: (p) => this.continueStroke(p),
       onSculptEnd: () => this.endStroke(),
       onLightStart: (p) => this.moveLight(p),
       onLightMove: (p) => this.moveLight(p),
-      onCameraStart: (s) => {
-        if (this.view === '3d') this.pinch3d = { distance: this.viewer3d.distance, start: Math.max(1, s.distance) };
-        else this.viewport.beginPinch(s);
-      },
+      onCameraStart: (s) => this.viewport.beginPinch(s),
       onCameraMove: (s) => {
         if (!s) return;
-        if (this.view === '3d') {
-          if (this.pinch3d) this.viewer3d.setDistance(this.pinch3d.distance / (s.distance / this.pinch3d.start));
-          this.render3d();
-        } else this.viewport.updatePinch(s);
+        this.viewport.updatePinch(s);
       },
-      onPanStart: (p) => {
-        if (this.view === '3d') this.orbitFrom = { x: p.x, y: p.y };
-        else this.viewport.beginPan(p);
-      },
-      onPanMove: (p) => {
-        if (this.view === '3d') {
-          if (!this.orbitFrom) return;
-          // Un déplacement d'une largeur d'écran fait un demi-tour : le geste
-          // reste prévisible quelle que soit la taille de la fenêtre.
-          this.viewer3d.orbitBy(
-            ((p.x - this.orbitFrom.x) / window.innerWidth) * Math.PI * 2,
-            ((p.y - this.orbitFrom.y) / window.innerHeight) * Math.PI
-          );
-          this.orbitFrom = { x: p.x, y: p.y };
-          this.render3d();
-        } else this.viewport.updatePan(p);
-      },
+      onPanStart: (p) => this.viewport.beginPan(p),
+      onPanMove: (p) => this.viewport.updatePan(p),
       onResizeStart: (p) => this.beginResize(p),
       onResizeMove: (p) => this.updateResize(p),
       onResizeEnd: () => this.endResize(),
@@ -445,7 +558,7 @@ export class Atelier {
       target: event.target,
     });
 
-    stage.addEventListener('pointerdown', (event) => {
+    this.ecouter(stage, 'pointerdown', (event) => {
       const p = toPointer(event);
       const zone = this.zoneOf(p);
       // On ne confisque jamais un pointeur destiné à l'interface : les boutons
@@ -462,7 +575,7 @@ export class Atelier {
       this.gestures.pointerDown(p);
     });
 
-    stage.addEventListener('pointermove', (event) => {
+    this.ecouter(stage, 'pointermove', (event) => {
       if (this.gestures.pointerCount === 0) return;
       const p = toPointer(event);
       // Les événements coalescés ne servent qu'au trait ; les autres rôles se
@@ -477,17 +590,17 @@ export class Atelier {
 
     // Fins de geste écoutées sur la FENÊTRE. C'est ce qui empêche un pointeur
     // relevé hors de la toile de rester compté — le défaut relevé au lot 0.
-    window.addEventListener('pointerup', (event) => {
+    this.onWindow('pointerup', (event) => {
       if (this.gestures.pointerCount === 0) return;
       this.gestures.pointerUp(toPointer(event));
       this.afterGesture();
     });
-    window.addEventListener('pointercancel', (event) => {
+    this.onWindow('pointercancel', (event) => {
       if (this.gestures.pointerCount === 0) return;
       this.gestures.pointerCancel(toPointer(event));
       this.afterGesture();
     });
-    window.addEventListener('blur', () => {
+    this.onWindow('blur', () => {
       if (!this.gestures.busy) return;
       this.gestures.cancelAll();
       this.afterGesture();
@@ -504,7 +617,6 @@ export class Atelier {
     }
     // En volume, l'œuvre n'est pas une surface d'édition : tout glisser à un
     // pointeur y tourne la caméra, qu'il parte de l'œuvre ou d'à côté (§10).
-    if (this.view === '3d') return 'outside';
     const rect = this.artWrap.getBoundingClientRect();
     const inside = p.x >= rect.left && p.x <= rect.right && p.y >= rect.top && p.y <= rect.bottom;
     return inside ? 'canvas' : 'outside';
@@ -515,15 +627,11 @@ export class Atelier {
     if (this.gestures.role !== ROLE.NONE) return;
     this.viewport.endPinch();
     this.viewport.endPan();
-    this.orbitFrom = null;
-    this.pinch3d = null;
-    if (this.view === '3d') this.persistCamera();
     if (this.lightMoved) {
       this.lightMoved = false;
       this.render();
       this.scheduleSaveProject();
     }
-    if (this.anim.enabled) this.restartAnim();
   }
 
   toCm(clientX, clientY) {
@@ -540,7 +648,9 @@ export class Atelier {
 
   beginStroke(p) {
     const { xCm, yCm } = this.toCm(p.x, p.y);
-    this.stroke = { lastX: xCm, lastY: yCm };
+    // Le suiveur de direction est remis à neuf à chaque trait : l'orientation
+    // ne se reporte pas d'un geste au suivant.
+    this.stroke = { lastX: xCm, lastY: yCm, direction: new DirectionTracker() };
     this.stampAt(xCm, yCm, 0, 0, p.pressure, true);
     this.queuePatch();
   }
@@ -559,6 +669,21 @@ export class Atelier {
     this.queuePatch();
   }
 
+  /**
+   * Orientation à donner à la brosse pour ce coup (§6).
+   *
+   * En mode manuel c'est le réglage, tel quel. En mode « suit le tracé », c'est
+   * la direction du geste, lissée en angle double — voir `FOLLOW_SMOOTHING`.
+   */
+  strokeAngleDeg(dxCm, dyCm) {
+    const ui = this.project.ui;
+    if (!ui.brushFollowStroke || !this.stroke) return ui.brushAngle || 0;
+    this.stroke.direction.push(dxCm, dyCm);
+    // Tant que le geste n'a pas fourni de direction — au tout premier contact,
+    // où le déplacement est nul par définition — on garde le réglage manuel.
+    return this.stroke.direction.angleDeg(ui.brushAngle || 0);
+  }
+
   stampAt(xCm, yCm, dxCm, dyCm, pressure, first) {
     const rect = stamp(this.layer, {
       tool: this.project.ui.activeTool,
@@ -570,7 +695,7 @@ export class Atelier {
       strength: this.project.ui.brushStrength,
       pressure,
       elongation: this.project.ui.brushElongation,
-      angleDeg: this.project.ui.brushAngle,
+      angleDeg: this.strokeAngleDeg(dxCm, dyCm),
       first,
     });
     if (rect) this.growDirty(rect);
@@ -651,6 +776,7 @@ export class Atelier {
     this.syncControlsFromProject();
     this.rebuild();
     this.scheduleSaveProject();
+    this.proWorkspace?.recordVariation('Variation générée');
   }
 
   setBase() {
@@ -663,7 +789,7 @@ export class Atelier {
     const snapshot = this.project.baseDesignSnapshot;
     if (!snapshot) return;
     // On restaure les VRAIES données, sculpture comprise, pas une approximation.
-    this.pushUndo();
+    this.history.push();
     this.project.geometry = baseGeometryOf(snapshot, this.project.geometry);
     this.layer.adopt(snapshot.sculpt);
     this.project.ui.presetKey = null;
@@ -680,63 +806,14 @@ export class Atelier {
     if (button) button.disabled = !this.project.baseDesignSnapshot;
   }
 
-  // ---- Vue 3D (§9, §10) ----
+  // ---- Vue 2D ----
 
-  setView(mode) {
-    if (mode === this.view) return;
-    this.view = mode;
-    const canvas3d = this.root.querySelector('#viewer3d');
-    this.artWrap.dataset.view = mode;
-    this.canvas.hidden = mode === '3d';
-    canvas3d.hidden = mode !== '3d';
-    this.root.querySelector('#view3d').classList.toggle('active', mode === '3d');
-
-    if (mode === '3d') {
-      if (!this.viewer3d) {
-        this.viewer3d = new Viewer3D(canvas3d);
-        this.viewer3d.restore(this.project.camera);
-      }
-      this.refresh3d();
-    }
-    this.scheduleSaveProject();
-  }
-
-  /** Reconstruit le mesh depuis la heightmap courante et redessine. */
-  refresh3d() {
-    if (this.view !== '3d' || !this.viewer3d || !this.hm) return;
-    const rect = this.artWrap.getBoundingClientRect();
-    this.viewer3d.resize(Math.max(1, Math.round(rect.width)), Math.max(1, Math.round(rect.height)));
-    this.viewer3d.setRelief(this.project, this.hm);
-    this.viewer3d.setAppearance(this.project);
-    this.viewer3d.render();
-  }
-
-  render3d() {
-    if (this.view === '3d' && this.viewer3d) this.viewer3d.render();
-  }
-
-  /**
-   * Mémorise la caméra. Appelé à la fin d'un geste MAIS AUSSI après un
-   * recentrage : le bouton « Vue face » et la double tape changeaient la vue
-   * sans jamais l'enregistrer, si bien qu'un rechargement ramenait le cadrage
-   * précédent.
-   */
-  persistCamera() {
-    if (!this.viewer3d) return;
-    this.project.camera = this.viewer3d.serialize();
-    this.scheduleSaveProject();
-  }
-
-  /** Recentrage : double tape extérieure et bouton « Vue face » (§10). */
+  // Ces passe-plats restent appelés par le cycle de rendu historique. Ils sont
+  // intentionnellement vides : aucune ressource WebGL n'est chargée pour un
+  // produit dont l'unique sortie est une image PNG.
   recentreView() {
-    if (this.view === '3d' && this.viewer3d) {
-      this.viewer3d.resetToFront();
-      this.render3d();
-      this.persistCamera();
-    } else {
-      this.viewport.reset();
-      this.render();
-    }
+    this.viewport.reset();
+    this.render();
   }
 
   // ---- Redimensionnement physique de la toile (§3) ----
@@ -748,7 +825,7 @@ export class Atelier {
 
   bindResizeHandle() {
     const lock = this.root.querySelector('#ratioLock');
-    lock.addEventListener('click', () => {
+    this.ecouter(lock, 'click', () => {
       this.project.ui.ratioLocked = !this.project.ui.ratioLocked;
       this.applyShapeToDom();
       this.scheduleSaveProject();
@@ -782,15 +859,19 @@ export class Atelier {
 
     if (locked) {
       // Ratio verrouillé : c'est le déplacement dominant qui commande, et
-      // l'autre dimension suit exactement.
+      // l'autre dimension suit exactement. Le bornage se fait sur la LARGEUR
+      // seule, dans l'intervalle où la hauteur induite reste légale — plafonner
+      // les deux séparément rompait le verrou contre des bornes asymétriques.
       const ratio = r.startW / r.startH;
-      if (Math.abs(p.x - r.startX) >= Math.abs(p.y - r.startY)) heightCm = widthCm / ratio;
-      else widthCm = heightCm * ratio;
+      const vise = Math.abs(p.x - r.startX) >= Math.abs(p.y - r.startY) ? widthCm : heightCm * ratio;
+      const ajuste = fitLockedSize(this.project.canvasShape, ratio, vise);
+      widthCm = ajuste.widthCm;
+      heightCm = ajuste.heightCm;
+    } else {
+      widthCm = clamp(Math.round(widthCm), bounds.widthCm.min, bounds.widthCm.max);
+      const heightBound = bounds.heightCm || bounds.widthCm;
+      heightCm = clamp(Math.round(heightCm), heightBound.min, heightBound.max);
     }
-
-    widthCm = clamp(Math.round(widthCm), bounds.widthCm.min, bounds.widthCm.max);
-    const heightBound = bounds.heightCm || bounds.widthCm;
-    heightCm = clamp(Math.round(heightCm), heightBound.min, heightBound.max);
     if (this.project.canvasShape !== 'rectangle') heightCm = widthCm;
 
     this.project.widthCm = widthCm;
@@ -835,16 +916,10 @@ export class Atelier {
     const ui = this.project.ui;
     ui.docks = ui.docks || {};
 
-    this.toolbarDock = new Dock(this.root.querySelector('#toolbar'), {
-      handle: this.root.querySelector('#toolbarHandle'),
-      collapseBtn: this.root.querySelector('#toolbarCollapse'),
-      artWrap: this.artWrap,
-      state: ui.docks.toolbar,
-      onPersist: (state) => {
-        ui.docks.toolbar = state;
-        this.scheduleSaveProject();
-      },
-    });
+    // La barre principale appartient maintenant au chrome de composition : elle
+    // ne flotte plus au-dessus de l’œuvre et n’a donc plus besoin d’ancrage.
+    // L’adaptateur conserve l’interface appelée par le reste du contrôleur.
+    this.toolbarDock = { apply() {}, destroy() {} };
 
     this.miniDock = new Dock(this.root.querySelector('#miniPalette'), {
       handle: this.root.querySelector('#miniHandle'),
@@ -856,20 +931,16 @@ export class Atelier {
       },
     });
 
-    this.root.querySelector('#miniToggle').addEventListener('click', () => {
+    this.ecouter(this.root.querySelector('#miniToggle'), 'click', () => {
       this.miniDock.setVisible(!this.miniDock.state.visible);
     });
 
-    this.root.querySelector('#view3d').addEventListener('click', () => {
-      this.setView(this.view === '3d' ? '2d' : '3d');
-    });
-
-    this.root.querySelector('#resetView').addEventListener('click', () => this.recentreView());
+    this.ecouter(this.root.querySelector('#resetView'), 'click', () => this.recentreView());
 
     // La mini-palette n'a pas d'état propre : elle pilote les mêmes réglages
     // que la barre principale, et les deux restent synchronisées.
     this.root.querySelectorAll('[data-mini-tool]').forEach((button) => {
-      button.addEventListener('click', () => {
+      this.ecouter(button, 'click', () => {
         this.setTool(button.dataset.miniTool);
         this.syncMiniPalette();
         this.scheduleSaveProject();
@@ -877,12 +948,19 @@ export class Atelier {
     });
     const miniSize = this.root.querySelector('#miniSize');
     const miniStrength = this.root.querySelector('#miniStrength');
-    miniSize.addEventListener('input', () => {
+    const miniElongation = this.root.querySelector('#miniElongation');
+    if (miniElongation) {
+      this.ecouter(miniElongation, 'input', () => {
+        this.brushElongation.value = miniElongation.value;
+        this.brushElongation.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    }
+    this.ecouter(miniSize, 'input', () => {
       this.brushSize.value = miniSize.value;
       this.brushSize.dispatchEvent(new Event('input', { bubbles: true }));
       this.syncMiniPalette();
     });
-    miniStrength.addEventListener('input', () => {
+    this.ecouter(miniStrength, 'input', () => {
       this.brushStrength.value = miniStrength.value;
       this.brushStrength.dispatchEvent(new Event('input', { bubbles: true }));
       this.syncMiniPalette();
@@ -898,87 +976,61 @@ export class Atelier {
     miniStrength.value = this.brushStrength.value;
     this.root.querySelector('#miniSizeValue').value = `${miniSize.value} cm`;
     this.root.querySelector('#miniStrengthValue').value = `${miniStrength.value} %`;
+    const miniElongation = this.root.querySelector('#miniElongation');
+    const miniElongationOut = this.root.querySelector('#miniElongationValue');
+    if (miniElongation && this.brushElongation) {
+      miniElongation.value = this.brushElongation.value;
+      const min = Number(miniElongation.min);
+      const max = Number(miniElongation.max);
+      miniElongation.style.setProperty('--range', (((Number(miniElongation.value) - min) / (max - min)) * 100).toFixed(2) + '%');
+      if (miniElongationOut) {
+        const { aspect } = brushAxes(1, Number(miniElongation.value) / 100);
+        miniElongationOut.value = aspect < 1.02 ? 'ronde' : `${aspect.toFixed(1).replace('.', ',')} : 1`;
+      }
+    }
     this.root.querySelectorAll('[data-mini-tool]').forEach((b) => {
       b.classList.toggle('active', b.dataset.miniTool === this.project.ui.activeTool);
     });
-  }
-
-  // ---- Annuler / rétablir ----
-
-  pushUndo() {
-    this.undoStack.push(this.layer.snapshot());
-    if (this.undoStack.length > 15) this.undoStack.shift();
-    this.redoStack.length = 0;
-    this.refreshHistoryButtons();
-  }
-
-  refreshHistoryButtons() {
-    this.undoBtn.disabled = !this.undoStack.length;
-    this.redoBtn.disabled = !this.redoStack.length;
-  }
-
-  undo() {
-    if (!this.undoStack.length) return;
-    this.redoStack.push(this.layer.snapshot());
-    this.layer.restore(this.undoStack.pop());
-    this.refreshHistoryButtons();
-    this.rebuild();
-    this.scheduleSaveSculpt();
-  }
-
-  redo() {
-    if (!this.redoStack.length) return;
-    this.undoStack.push(this.layer.snapshot());
-    this.layer.restore(this.redoStack.pop());
-    this.refreshHistoryButtons();
-    this.rebuild();
-    this.scheduleSaveSculpt();
   }
 
   // ---- Divers ----
 
   bindMisc() {
     this.root.querySelectorAll('.preset').forEach((button) => {
-      button.addEventListener('click', () => {
+      this.ecouter(button, 'click', () => {
         this.project = applyPreset(this.project, button.dataset.preset);
         this.syncControlsFromProject();
         this.rebuild();
         this.scheduleSaveProject();
+        this.proWorkspace?.recordVariation('Préréglage');
       });
     });
 
     const variation = () => this.newVariation();
-    this.root.querySelector('#variationTop').addEventListener('click', variation);
-    this.root.querySelector('#variationMobile').addEventListener('click', variation);
-    this.root.querySelector('#newVariation').addEventListener('click', variation);
-    this.root.querySelector('#setBase').addEventListener('click', () => this.setBase());
-    this.root.querySelector('#restoreBase').addEventListener('click', () => this.restoreBase());
+    this.ecouter(this.root.querySelector('#variationTop'), 'click', variation);
+    this.ecouter(this.root.querySelector('#variationMobile'), 'click', variation);
+    this.ecouter(this.root.querySelector('#newVariation'), 'click', variation);
+    this.ecouter(this.root.querySelector('#setBase'), 'click', () => this.setBase());
+    this.ecouter(this.root.querySelector('#restoreBase'), 'click', () => this.restoreBase());
 
 
-    this.root.querySelector('#newProject').addEventListener('click', () => this.onNewProject());
+    this.ecouter(this.root.querySelector('#newProject'), 'click', () => this.onNewProject());
 
-    this.root.querySelector('#clearSculpt').addEventListener('click', () => {
-      this.pushUndo();
+    this.ecouter(this.root.querySelector('#clearSculpt'), 'click', () => {
+      this.history.push();
       this.layer.clear();
       this.rebuild();
       this.scheduleSaveSculpt();
     });
 
-    this.root.querySelector('#animate').addEventListener('change', (event) => {
-      this.anim.enabled = event.target.checked;
-      this.project.ui.animate = this.anim.enabled;
-      if (this.anim.enabled) this.restartAnim();
-      else this.stopAnim();
-    });
-
-    window.addEventListener('keydown', (event) => {
+    this.onWindow('keydown', (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
         event.preventDefault();
-        if (event.shiftKey) this.redo();
-        else this.undo();
+        if (event.shiftKey) this.history.redo();
+        else this.history.undo();
       } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') {
         event.preventDefault();
-        this.redo();
+        this.history.redo();
       }
     });
 
@@ -990,200 +1042,49 @@ export class Atelier {
       backdrop.classList.toggle('show', open);
       drawerToggle.setAttribute('aria-expanded', String(open));
     };
-    drawerToggle.addEventListener('click', () => setDrawer(!sidebar.classList.contains('open')));
-    backdrop.addEventListener('click', () => setDrawer(false));
-  }
-
-  // ---- Animation de l'ondulation ----
-  // Portée de la version 1 : la carte statique est construite une fois, seule la
-  // houle est recalculée par image. Le lot 2 remplace ce terme additif — c'est
-  // lui qui fabrique les îlots au fond des cavités.
-
-  restartAnim() {
-    if (!this.anim.enabled || !this.hm) return;
-    if (!this.anim.canvas) {
-      this.anim.canvas = document.createElement('canvas');
-      this.anim.cache = createRenderCache();
-    }
-    // Le champ statique est mis en cache une fois. Il faut donc le refaire dès
-    // que la géométrie ou la sculpture changent — c'est le rôle de cet appel,
-    // déclenché par `rebuild()`.
-    this.anim.animator = new SwellAnimator(this.project, this.layer, this.anim.quality);
-    this.anim.animatorQuality = this.anim.quality;
-    if (!this.anim.raf) this.anim.raf = requestAnimationFrame((ts) => this.animFrame(ts));
-  }
-
-  stopAnim() {
-    if (this.anim.raf) cancelAnimationFrame(this.anim.raf);
-    this.anim.raf = 0;
-    this.anim.avg = 0;
-    this.render();
-  }
-
-  animFrame(ts) {
-    this.anim.raf = requestAnimationFrame((next) => this.animFrame(next));
-    if (!this.anim.enabled || document.hidden || this.gestureActive) return;
-    if (ts - this.anim.lastTs < 40) return;
-    this.anim.lastTs = ts;
-
-    const start = performance.now();
-    this.drawAnimFrame(ts * 0.00016);
-    const dt = performance.now() - start;
-    this.anim.avg = this.anim.avg ? this.anim.avg * 0.8 + dt * 0.2 : dt;
-    if (this.anim.avg > 34 && this.anim.quality > 0.18) {
-      this.anim.quality = Math.max(0.18, this.anim.quality * 0.75);
-      this.anim.avg = 0;
-      this.anim.animator = null; // le cache doit être refait à la nouvelle grille
-    }
+    this.ecouter(drawerToggle, 'click', () => setDrawer(!sidebar.classList.contains('open')));
+    this.ecouter(backdrop, 'click', () => setDrawer(false));
   }
 
   /**
-   * Le champ étant une fonction pure des centimètres, animer l'ondulation revient
-   * à faire défiler le domaine de la HOULE PORTEUSE et à rééchantillonner le champ
-   * sur une grille plus grossière. La structure des creux ne bouge pas ; c'est la
-   * houle qui traverse la pièce. Le moteur v1 gardait sa carte statique et ajoutait
-   * une sinusoïde par-dessus — c'est précisément ce qui posait une bosse au fond
-   * des cavités.
+   * Pose un écouteur lié au cycle de vie de cet atelier : `destroy` le retire.
+   * Toute liaison de l'atelier passe par ici, y compris sur `window`.
    */
-  drawAnimFrame(phase) {
-    const quality = this.anim.quality;
-    if (!this.anim.animator || this.anim.animatorQuality !== quality) {
-      this.anim.animator = new SwellAnimator(this.project, this.layer, quality);
-      this.anim.animatorQuality = quality;
-    }
-    // Seule la houle est réévaluée : deux évaluations de bruit par cellule au
-    // lieu d'une quinzaine. Mesuré à 4,2 ms par image contre 22,7 ms pour une
-    // reconstruction complète, à qualité 0,45 sur un panneau de 200 × 120 cm.
-    const hm = this.anim.animator.frame(phase);
-    const { outW, outH } = this.outputSize();
-    const w = Math.max(64, Math.round(outW * quality));
-    const h = Math.max(1, Math.round(outH * quality));
-    renderFull(this.anim.canvas, this.project, hm, w, h, this.anim.cache);
-    const ctx = this.canvas.getContext('2d', { alpha: true });
-    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(this.anim.canvas, 0, 0, this.canvas.width, this.canvas.height);
+  ecouter(cible, type, handler, options = {}) {
+    cible.addEventListener(type, handler, { ...options, signal: this.signal });
   }
 
-  // ---- Export (§17, §18) ----
-  //
-  // Images et modèles partent de la MÊME heightmap que l'écran. Il n'existe pas
-  // de « géométrie d'export » : c'est la seule façon sûre de ne jamais livrer,
-  // comme l'interdit §18, une image plaquée sur un rectangle plat.
-
-  bindExport() {
-    this.exportFormat = this.root.querySelector('#exportFormat');
-    this.exportLongSide = this.root.querySelector('#exportLongSide');
-    this.exportCustom = this.root.querySelector('#exportCustom');
-    this.exportNote = this.root.querySelector('#exportNote');
-    this.exportTransparent = this.root.querySelector('#exportTransparent');
-
-    const refresh = () => this.refreshExportPanel();
-    this.exportFormat.addEventListener('change', refresh);
-    this.exportLongSide.addEventListener('change', refresh);
-    this.exportCustom.addEventListener('input', refresh);
-    this.root.querySelector('#exportRun').addEventListener('click', (event) => this.runExport(event.currentTarget));
-
-    // Les deux boutons hérités de la version 1 lancent l'export courant.
-    this.root.querySelector('#exportTop').addEventListener('click', () => this.root.querySelector('#exportRun').click());
-    this.root.querySelector('#exportMobile').addEventListener('click', () => this.root.querySelector('#exportRun').click());
-    refresh();
-  }
-
-  chosenLongSide() {
-    return this.exportLongSide.value === 'custom' ? Number(this.exportCustom.value) : Number(this.exportLongSide.value);
-  }
-
-  refreshExportPanel() {
-    const format = this.exportFormat.value;
-    const image = format === 'png' || format === 'jpeg';
-    this.root.querySelector('#exportSizeControl').hidden = !image;
-    this.root.querySelector('#exportCustomControl').hidden = !image || this.exportLongSide.value !== 'custom';
-    // La transparence n'a de sens qu'en PNG, et seulement autour d'un disque.
-    this.root.querySelector('#exportTransparentControl').hidden = !(format === 'png' && this.project.canvasShape === 'circle');
-    this.root.querySelector('#exportCustomValue').value = `${this.exportCustom.value} px`;
-
-    if (image) {
-      const out = outputSizeFor(this.project, this.chosenLongSide());
-      const megapixels = (out.width * out.height) / 1e6;
-      this.exportNote.textContent = out.clamped
-        ? `${out.width} × ${out.height} px — définition ramenée sous le plafond mémoire (${megapixels.toFixed(1)} Mpx).`
-        : `${out.width} × ${out.height} px (${megapixels.toFixed(1)} Mpx), au rapport du panneau.`;
-      this.exportNote.classList.toggle('warn', out.clamped);
-    } else {
-      const triangles = this.hm ? Math.min(EXPORT_MAX_TRIANGLES, (this.hm.cols - 1) * (this.hm.rows - 1) * 2) : 0;
-      const millions = triangles / 1000;
-      this.exportNote.textContent =
-        format === 'usdz'
-          ? `Modèle en mètres, ${Math.round(millions)} k triangles, environ ${(triangles * 0.0000235).toFixed(1)} Mo. S'ouvre directement dans Procreate.`
-          : `Deux fichiers de même racine : ${fileBaseFor(this.project)}.obj et ${fileBaseFor(this.project)}.mtl. Gardez-les côte à côte, l'OBJ pointe sur le MTL.`;
-      this.exportNote.classList.remove('warn');
-    }
-  }
-
-  /** Déclenche le téléchargement d'un blob. */
-  download(blob, name) {
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = name;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(link.href), 1500);
-  }
-
-  async runExport(button) {
-    if (!this.hm) return;
-    const format = this.exportFormat.value;
-    const original = button.textContent;
-    button.disabled = true;
-    button.textContent = 'Calcul…';
-    this.rendering.classList.add('show');
-    await new Promise((resolve) => setTimeout(resolve, 40));
-
-    try {
-      if (format === 'png' || format === 'jpeg') {
-        const { canvas, width, height } = renderForExport(this.project, this.hm, {
-          longSide: this.chosenLongSide(),
-          format,
-          transparent: this.exportTransparent.checked,
-        });
-        const blob = await encode(canvas, format);
-        if (blob) this.download(blob, fileNameFor(this.project, format, width, height));
-      } else if (format === 'usdz') {
-        const { data } = await exportUsdz(this.project, this.hm);
-        this.download(new Blob([data], { type: 'model/vnd.usdz+zip' }), `${fileBaseFor(this.project)}.usdz`);
-      } else {
-        const { objText, mtlText, baseName } = exportObj(this.project, this.hm);
-        this.download(new Blob([objText], { type: 'model/obj' }), `${baseName}.obj`);
-        // Le MTL suit, légèrement décalé : deux téléchargements simultanés sont
-        // parfois fusionnés en un seul par le navigateur.
-        await new Promise((resolve) => setTimeout(resolve, 350));
-        this.download(new Blob([mtlText], { type: 'model/mtl' }), `${baseName}.mtl`);
-      }
-    } catch (error) {
-      this.exportNote.textContent = `Export impossible : ${error.message}`;
-      this.exportNote.classList.add('warn');
-    } finally {
-      button.disabled = false;
-      button.textContent = original;
-      this.rendering.classList.remove('show');
-    }
+  onWindow(type, handler, options) {
+    this.ecouter(window, type, handler, options);
   }
 
   // ---- Persistance ----
+  //
+  // Déléguée à `ProjectStore` depuis le lot 8. Ces trois passe-plats existent
+  // parce que `main.js` et la vue 3D appellent l'atelier, pas son magasin.
+
+  setSaveStatus(message) {
+    this.store.setStatus(message);
+  }
+
+  saveProjectNow() {
+    return this.store.saveProjectNow();
+  }
+
+  disableStorage(reason) {
+    this.store.disable(reason);
+  }
+
+  flushSaves() {
+    this.store.flush();
+  }
 
   scheduleSaveProject() {
-    clearTimeout(this.saveProjectTimer);
-    this.saveProjectTimer = setTimeout(() => {
-      db.saveProject(this.project).catch(() => {});
-      db.setMeta('lastProjectId', this.project.id).catch(() => {});
-    }, 400);
+    this.store.scheduleProject();
   }
 
   scheduleSaveSculpt() {
-    clearTimeout(this.saveSculptTimer);
-    this.saveSculptTimer = setTimeout(() => {
-      db.saveSculpt(this.project.id, this.layer.active ? this.layer.serialize() : null).catch(() => {});
-    }, 800);
+    this.store.scheduleSculpt();
   }
 
   show() {
@@ -1196,8 +1097,24 @@ export class Atelier {
   }
 
   destroy() {
+    // INVALIDER LE JETON DE RENDU. `rebuild()` diffère son calcul d'une image —
+    // `requestAnimationFrame` en onglet visible, `setTimeout` en onglet caché,
+    // et ce dernier peut être retardé de plusieurs secondes par le bridage des
+    // onglets d'arrière-plan. Sans cette ligne, un atelier détruit terminait sa
+    // reconstruction en attente et repeignait `#reliefCanvas`, qui est PARTAGÉ
+    // avec l'atelier suivant : l'œuvre affichée était alors celle du projet
+    // précédent, jusqu'au prochain rendu.
+    //
+    // Mesuré au lot 8 : après une séquence chargée, le premier projet rouvert
+    // affichait le relief de l'ancien — deux images stables et différentes pour
+    // un même projet, selon qu'un rendu fantôme était encore en vol.
+    this.renderToken++;
     this.observer.disconnect();
-    this.stopAnim();
+    this.store.destroy();
+    this.listeners.abort();
+    this.toolbarDock?.destroy();
+    this.miniDock?.destroy();
+    this.proWorkspace?.destroy();
   }
 }
 
