@@ -6,18 +6,37 @@
 // le futur mesh 3D et les exports montrent le MÊME relief, et non trois évaluations
 // indépendantes qui se ressemblent.
 
-import { resampleTo, sampleHeight } from '../geometry/heightmap.js';
+import { resampleTo, sampleAo, sampleHeight } from '../geometry/heightmap.js';
 import { shadeParams, shadeRegion } from './shade.js';
 
 export function createRenderCache() {
-  return { map: null, outW: 0, outH: 0, sp: null, mean: 0 };
+  return { map: null, ao: null, outW: 0, outH: 0, sp: null };
 }
 
 function ensureBuffer(cache, outW, outH) {
   if (cache.outW !== outW || cache.outH !== outH || !cache.map) {
     cache.map = new Float32Array(outW * outH);
+    cache.ao = new Float32Array(outW * outH);
     cache.outW = outW;
     cache.outH = outH;
+  }
+}
+
+/**
+ * Reporte la surface de référence locale sur la grille de sortie.
+ * Elle est très basse fréquence : un prélèvement bilinéaire suffit, là où la
+ * hauteur exige un Catmull-Rom pour ne pas facetter les normales.
+ */
+function fillAo(cache, hm, project, outW, outH) {
+  const halfW = project.widthCm / 2;
+  const halfH = project.heightCm / 2;
+  for (let py = 0; py < outH; py++) {
+    const yCm = -halfH + (outH === 1 ? 0 : (py / (outH - 1)) * project.heightCm);
+    const row = py * outW;
+    for (let px = 0; px < outW; px++) {
+      const xCm = -halfW + (outW === 1 ? 0 : (px / (outW - 1)) * project.widthCm);
+      cache.ao[row + px] = sampleAo(hm.ao, xCm, yCm);
+    }
   }
 }
 
@@ -91,12 +110,12 @@ export function renderFull(canvas, project, hm, outW, outH, cache = createRender
   canvas.height = outH;
   ensureBuffer(cache, outW, outH);
   resampleTo(hm, project, outW, outH, cache.map);
+  fillAo(cache, hm, project, outW, outH);
 
-  const sp = shadeParams(project, outW);
-  const mean = hm.mean;
+  const sp = shadeParams(project, outW, hm.max - hm.min);
   const ctx = canvas.getContext('2d', { alpha: true });
   const image = ctx.createImageData(outW, outH);
-  shadeRegion(image.data, cache.map, outW, outH, 0, 0, outW, outH, 0, 0, outW, outH, sp, mean);
+  shadeRegion(image.data, cache.map, cache.ao, outW, outH, 0, 0, outW, outH, 0, 0, outW, outH, sp);
   ctx.putImageData(image, 0, 0);
 
   applyShapeMask(ctx, project, outW, outH);
@@ -104,7 +123,6 @@ export function renderFull(canvas, project, hm, outW, outH, cache = createRender
   drawFrame(ctx, project, outW, outH);
 
   cache.sp = sp;
-  cache.mean = mean;
   return cache;
 }
 
@@ -136,6 +154,7 @@ export function renderPatch(canvas, project, hm, cache, rectCm) {
     for (let px = px0; px < px1; px++) {
       const xCm = -halfW + (outW === 1 ? 0 : (px / (outW - 1)) * project.widthCm);
       cache.map[row + px] = sampleHeight(hm, xCm, yCm);
+      cache.ao[row + px] = sampleAo(hm.ao, xCm, yCm);
     }
   }
 
@@ -145,7 +164,7 @@ export function renderPatch(canvas, project, hm, cache, rectCm) {
   patchCanvas.height = ph;
   const pctx = patchCanvas.getContext('2d', { alpha: true });
   const image = pctx.createImageData(pw, ph);
-  shadeRegion(image.data, cache.map, outW, outH, px0, py0, px1, py1, px0, py0, outW, outH, cache.sp, cache.mean);
+  shadeRegion(image.data, cache.map, cache.ao, outW, outH, px0, py0, px1, py1, px0, py0, outW, outH, cache.sp);
   pctx.putImageData(image, 0, 0);
 
   const ctx = canvas.getContext('2d', { alpha: true });

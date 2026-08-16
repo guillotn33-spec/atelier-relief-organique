@@ -109,11 +109,29 @@ export function defaultGeometry() {
 
 export const GEOMETRY_BOUNDS = {
   basinScaleCm: [8, 160],
-  // Plancher à 0,55 : des chenaux beaucoup plus fins que les bassins n'ont pas
-  // le comportement attendu. Au lieu de RELIER les bols, ils ondulent DEDANS et
-  // y laissent des bosses enclavées. Mesuré sur 48 variations, proéminence
-  // maximale d'îlot selon le plancher : 0,20 → 15,6 % ; 0,45 → 7,2 % ;
-  // 0,55 → 2,8 %. Ce n'est pas une préférence esthétique, c'est une borne.
+  // Plancher à 0,55 : des chenaux beaucoup plus fins que les bassins ne RELIENT
+  // pas les bols, ils ondulent dedans. La borne reste justifiée pour cette
+  // raison, qui est visible à l'œil.
+  //
+  // ⚠ CORRECTION DU LOT 4. Le lot 2 justifiait ce plancher par une proéminence
+  // d'îlot tombant à 2,8 %. Cette mesure ne valait que pour le panneau de
+  // 160 × 100 cm sur lequel elle avait été prise. Mesuré depuis sur trois
+  // formats, à 48 variations chacun :
+  //
+  //     160 × 100 :  6 îlots, max  2,26 %, médiane 0,66 %
+  //     200 × 120 : 20 îlots, max  7,52 %, médiane 2,77 %
+  //     300 × 180 : 74 îlots, max 16,72 %, médiane 4,88 %
+  //
+  // Et relever le plancher n'y change rien : à 0,62 le maximum MONTE (9,9 % à
+  // 200 × 120). Le facteur n'est pas le rapport des échelles mais le NOMBRE de
+  // cavités dans la fenêtre — plus il y en a, plus la probabilité qu'une
+  // contienne un minimum local du bruit est grande. C'est un effet de valeur
+  // extrême, pas un réglage.
+  //
+  // Piste de correction, hors périmètre du lot 4 : dériver la bande de chenaux
+  // DU champ des bassins (transformée en crête du même bruit) au lieu d'un
+  // bruit indépendant. Deux champs corrélés ne peuvent plus produire de minima
+  // intérieurs indépendants. C'est une modification de moteur.
   channelRatio: [0.55, 0.9],
   channelWeight: [0, 1],
   // Bornes resserrées après mesure. Sous 0,18 presque rien n'est creusé ; au-delà
@@ -137,7 +155,17 @@ export function defaultMaterial() {
 }
 
 export function defaultLighting() {
-  return { angle: 245, height: 42, contrast: 0.8, backlight: 0.58 };
+  return {
+    angle: 245,
+    height: 42,
+    contrast: 0.8,
+    backlight: 0.58,
+    // §7 — contrôles séparés. Les valeurs par défaut restent naturelles ; ce
+    // sont les extrêmes qui permettent le dramatique.
+    exposureEv: 0, // −2 à +2
+    shadowStrength: 0.55, // intensité des ombres
+    cavityOcclusion: 0.5, // occlusion des cavités
+  };
 }
 
 export function defaultPresentation() {
@@ -267,7 +295,7 @@ export const PRESETS = {
       depth: 0.95, softness: 0.50, wave: 0.55, shoulder: 0.58, fuse: 0.60,
     },
     material: { color: '#e8e4dc', texture: 0.3 },
-    lighting: { angle: 245, height: 42, contrast: 0.8, backlight: 0.58 },
+    lighting: { angle: 245, height: 42, contrast: 0.8, backlight: 0.58, exposureEv: 0, shadowStrength: 0.55, cavityOcclusion: 0.5 },
     presentation: { panelLayout: 'none', frame: true, wallColor: '#d8d3c9' },
   },
   cellules: {
@@ -279,7 +307,7 @@ export const PRESETS = {
       depth: 0.86, softness: 0.50, wave: 0.26, shoulder: 0.56, fuse: 0.30,
     },
     material: { color: '#d8d2c7', texture: 0.34 },
-    lighting: { angle: 218, height: 42, contrast: 0.78, backlight: 0.68 },
+    lighting: { angle: 218, height: 42, contrast: 0.78, backlight: 0.68, exposureEv: 0, shadowStrength: 0.5, cavityOcclusion: 0.45 },
     presentation: { panelLayout: '2x2', frame: false, wallColor: '#c9c4ba' },
   },
   archipel: {
@@ -291,7 +319,7 @@ export const PRESETS = {
       depth: 0.88, softness: 0.52, wave: 0.58, shoulder: 0.50, fuse: 0.70,
     },
     material: { color: '#e4dfd6', texture: 0.18 },
-    lighting: { angle: 232, height: 38, contrast: 0.83, backlight: 0.48 },
+    lighting: { angle: 232, height: 38, contrast: 0.83, backlight: 0.48, exposureEv: 0, shadowStrength: 0.6, cavityOcclusion: 0.55 },
     presentation: { panelLayout: '2x2', frame: false, wallColor: '#d5d0c6' },
   },
 };

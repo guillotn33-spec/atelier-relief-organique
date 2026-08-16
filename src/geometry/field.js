@@ -156,7 +156,18 @@ export function makeFieldContext(geometry) {
  * Évalue le relief en un point, en CENTIMÈTRES absolus.
  * `warpXCm`/`warpYCm` sont le déplacement sculpté, `liftValue` la hauteur sculptée.
  */
-export function evalField(ctx, xCm, yCm, warpXCm = 0, warpYCm = 0, liftValue = 0) {
+/**
+ * Décompose le relief en ses parties STATIQUE et VARIABLE.
+ *
+ * La hauteur s'écrit h = A·houle + B, où seule la houle dépend du temps :
+ *   A = amplitude × extinction(creusement)   — statique
+ *   B = −profondeur × creusement + sculpture — statique
+ * Les coordonnées d'échantillonnage de la houle (sx, sy) sont statiques elles
+ * aussi. C'est cette décomposition qui permet d'animer l'ondulation sans
+ * réévaluer tout le champ : par image il ne reste que la houle, soit deux
+ * évaluations de bruit au lieu d'une quinzaine.
+ */
+export function evalParts(ctx, xCm, yCm, warpXCm = 0, warpYCm = 0, liftValue = 0) {
   const px = xCm + ctx.offsetX + warpXCm;
   const py = yCm + ctx.offsetY + warpYCm;
 
@@ -176,15 +187,16 @@ export function evalField(ctx, xCm, yCm, warpXCm = 0, warpYCm = 0, liftValue = 0
   bx += ctx.warpFineAmpCm * fbm(fu + 1.73, fv + 9.11, ctx.seed + 307, 2);
   by += ctx.warpFineAmpCm * fbm(fu - 6.19, fv + 2.53, ctx.seed + 419, 2);
 
-  // 3. Houle porteuse — évaluée sur le repère NON déformé : elle porte la
-  //    composition entière au lieu de suivre ses accidents.
-  const carrier = fbm(ax * ctx.invSwell + ctx.carrierPhase, ay * ctx.invSwell, ctx.seed + 523, 2);
+  // 3. Houle porteuse — sur le repère NON déformé : elle porte la composition
+  //    entière au lieu de suivre ses accidents.
+  const sx = ax * ctx.invSwell;
+  const sy = ay * ctx.invSwell;
+  const carrier = fbm(sx + ctx.carrierPhase, sy, ctx.seed + 523, 2);
   const bias = ctx.carrierBias * carrier;
 
-  // 4. Creusement — deux bandes d'échelle, chacune monotone.
-  // Découpe du bord : haute fréquence, appliquée au SEUIL et non à la profondeur.
+  // 4. Creusement — découpe du bord au SEUIL, profondeur pilotée par un champ
+  //    délibérément pauvre en octaves (voir `octavesBasin`).
   const rim = ctx.rimJitter > 0 ? ctx.rimJitter * fbm(bx * ctx.invRim, by * ctx.invRim, ctx.seed + 3, 2) : 0;
-
   const nBasin = fbm(bx * ctx.invBasin, by * ctx.invBasin, ctx.seed + 1, ctx.octavesBasin);
   const carveBasin = ctx.carveGain * shoulderRamp(nBasin + bias + rim - ctx.thresholdBasin, ctx.shoulderBasin);
 
@@ -196,20 +208,32 @@ export function evalField(ctx, xCm, yCm, warpXCm = 0, warpYCm = 0, liftValue = 0
     carve = smax(carveBasin, carveChannel, ctx.fuseK);
   }
 
-  // La houle est le plateau. Elle s'ÉTEINT complètement dès que le creusement
-  // dépasse CARRIER_CUTOFF : passé ce point, la hauteur ne dépend plus que du
-  // creusement, et plus rien ne peut relever le fond d'une cavité.
+  // La houle est le plateau. Elle s'ÉTEINT dès que le creusement dépasse
+  // CARRIER_CUTOFF : passé ce point, plus rien ne peut relever le fond d'une
+  // cavité. Une atténuation en (1 − carve) changerait de signe au-delà de 1 et
+  // ferait remonter les fonds profonds — c'est le mécanisme des îlots.
   //
-  // Une atténuation en (1 − carve) serait pire que rien : elle change de signe
-  // au-delà de carve = 1 et la houle se met à REMONTER le fond des cavités
-  // profondes. C'est ce mécanisme qui a produit dix îlots sur les variations
-  // avant cette correction.
-  //
-  // Stricte monotonie : dh/dcarve = houle × extinction′(carve) − profondeur.
+  // Stricte monotonie : dh/dcarve = houle × extinction′ − profondeur, avec
   // |houle| ≤ SWELL_RATIO × profondeur et |extinction′| ≤ 1,5 / CARRIER_CUTOFF,
   // donc dh/dcarve ≤ (0,16 × 5 − 1) × profondeur = −0,20 × profondeur < 0.
   const attenuation = 1 - smoothstep01(carve / CARRIER_CUTOFF);
-  const h = ctx.swellAmp * carrier * attenuation - ctx.depth * carve + liftValue;
 
+  return {
+    a: ctx.swellAmp * attenuation,
+    b: -ctx.depth * carve + liftValue,
+    sx,
+    sy,
+    carrier,
+    carve,
+  };
+}
+
+/**
+ * Évalue le relief en un point, en CENTIMÈTRES absolus.
+ * `warpXCm`/`warpYCm` sont le déplacement sculpté, `liftValue` la hauteur sculptée.
+ */
+export function evalField(ctx, xCm, yCm, warpXCm = 0, warpYCm = 0, liftValue = 0) {
+  const parts = evalParts(ctx, xCm, yCm, warpXCm, warpYCm, liftValue);
+  const h = parts.a * parts.carrier + parts.b;
   return ctx.negative ? -h : h;
 }

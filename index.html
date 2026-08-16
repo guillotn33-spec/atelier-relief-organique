@@ -163,6 +163,15 @@
               <span class="control-head"><span>Grain de surface</span><output class="control-value" id="textureValue"></output></span>
               <input type="range" id="texture" min="0" max="100" step="1" value="30">
             </label>
+            <label class="control">
+              <span class="control-head"><span>Finition</span></span>
+              <select class="select" id="finish">
+                <option value="mat">Mat</option>
+                <option value="satine">Satiné</option>
+                <option value="brillant">Brillant</option>
+                <option value="chrome">Chrome</option>
+              </select>
+            </label>
             <label class="color-row" for="materialColor">
               <span>Couleur de matière</span>
               <input type="color" id="materialColor" value="#e8e4dc">
@@ -174,7 +183,7 @@
           <summary>Sculpture</summary>
           <div class="control-list">
             <label class="switch-row" for="animate">
-              <span>Animer l’ondulation <em style="font-style:normal;opacity:.55">· expérimental</em></span>
+              <span>Animer l’ondulation</span>
               <span class="switch"><input type="checkbox" id="animate"><span aria-hidden="true"></span></span>
             </label>
             <button class="btn" id="clearSculpt" type="button"><span class="btn-icon" aria-hidden="true">⌫</span> Effacer la sculpture</button>
@@ -191,6 +200,18 @@
             <label class="control">
               <span class="control-head"><span>Hauteur de la lumière</span><output class="control-value" id="lightHeightValue"></output></span>
               <input type="range" id="lightHeight" min="15" max="80" step="1" value="42">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Exposition</span><output class="control-value" id="exposureEvValue"></output></span>
+              <input type="range" id="exposureEv" min="-20" max="20" step="1" value="0">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Intensité des ombres</span><output class="control-value" id="shadowStrengthValue"></output></span>
+              <input type="range" id="shadowStrength" min="0" max="100" step="1" value="55">
+            </label>
+            <label class="control">
+              <span class="control-head"><span>Occlusion des cavités</span><output class="control-value" id="cavityOcclusionValue"></output></span>
+              <input type="range" id="cavityOcclusion" min="0" max="100" step="1" value="50">
             </label>
             <label class="control">
               <span class="control-head"><span>Contraste</span><output class="control-value" id="contrastValue"></output></span>

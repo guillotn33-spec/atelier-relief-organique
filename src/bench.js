@@ -10,7 +10,7 @@
 // Les mesures sont des boucles synchrones, pas des `requestAnimationFrame` :
 // elles ne dépendent donc pas de la visibilité de l'onglet.
 
-import { buildHeightmap, gridFor, resampleTo } from './geometry/heightmap.js';
+import { buildHeightmap, gridFor, resampleTo, sampleAo } from './geometry/heightmap.js';
 import { shadeParams, shadeRegion } from './render2d/shade.js';
 import { createProject, PRESETS, defaultGeometry } from './core/project.js';
 import { SculptLayer } from './sculpt/layer.js';
@@ -80,10 +80,18 @@ function run() {
     offscreen.width = outW;
     offscreen.height = outH;
     const ctx = offscreen.getContext('2d', { alpha: true });
-    const sp = shadeParams(project, outW);
+    const sp = shadeParams(project, outW, hm.max - hm.min);
     const image = ctx.createImageData(outW, outH);
+    const aoBuf = new Float32Array(outW * outH);
+    for (let py = 0; py < outH; py++) {
+      const yCm = -HEIGHT_CM / 2 + (py / Math.max(1, outH - 1)) * HEIGHT_CM;
+      for (let px = 0; px < outW; px++) {
+        const xCm = -WIDTH_CM / 2 + (px / Math.max(1, outW - 1)) * WIDTH_CM;
+        aoBuf[py * outW + px] = sampleAo(hm.ao, xCm, yCm);
+      }
+    }
     const tShade = timeIt(() => {
-      shadeRegion(image.data, map, outW, outH, 0, 0, outW, outH, 0, 0, outW, outH, sp, hm.mean);
+      shadeRegion(image.data, map, aoBuf, outW, outH, 0, 0, outW, outH, 0, 0, outW, outH, sp);
       ctx.putImageData(image, 0, 0);
     });
 

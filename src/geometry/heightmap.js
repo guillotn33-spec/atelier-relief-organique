@@ -215,6 +215,8 @@ export function buildHeightmap(project, layer, options = {}) {
   fillRaw(hm.raw, hm.cols, hm, project, layer, hm.ctx, 0, 0, hm.cols, hm.rows, options);
   blurTile(hm.raw, hm.h, hm.cols, hm.rows, hm.blurRadius);
   recomputeStats(hm);
+  hm.aoRadius = aoRadiusCells(project, grid);
+  hm.ao = buildAoField(hm, hm.aoRadius);
   return hm;
 }
 
@@ -256,8 +258,95 @@ export function updateHeightmapRect(hm, project, layer, rectCm, options = {}) {
     }
   }
   hm.sum = sum;
+  // La surface de référence dépend du relief : la sculpture la déplace aussi.
+  // Elle est très basse fréquence, donc peu coûteuse à refaire en entier.
+  hm.ao = buildAoField(hm, hm.aoRadius || 24);
 
   return { c0, r0, c1, r1 };
+}
+
+
+// ---- Surface de référence locale (occlusion) ----
+//
+// Un flou de très grand rayon donne la surface autour de laquelle le relief
+// ondule. L'écart entre la hauteur et cette surface est la PROFONDEUR LOCALE :
+// c'est elle qui autorise un fond de cavité presque noir sans toucher aux
+// plateaux (§7).
+//
+// Ce flou est calculé sur une grille DÉCIMÉE. Un rayon de 130 cellules sur la
+// grille pleine coûterait un noyau de 261 taps par passe ; décimé d'un facteur
+// k, il tombe à ~13 taps sur k² fois moins de cellules. Le champ recherché étant
+// par définition très basse fréquence, la décimation ne lui retire rien.
+
+const AO_TARGET_RADIUS = 6; // rayon visé sur la grille décimée
+
+export function buildAoField(hm, radiusCells) {
+  const k = Math.max(1, Math.ceil(radiusCells / AO_TARGET_RADIUS));
+  const cols = Math.max(2, Math.ceil(hm.cols / k));
+  const rows = Math.max(2, Math.ceil(hm.rows / k));
+  const small = new Float32Array(cols * rows);
+
+  // Moyenne de bloc plutôt qu'un simple prélèvement : sans elle, le repliement
+  // ferait scintiller l'occlusion d'une reconstruction à l'autre.
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      let sum = 0;
+      let n = 0;
+      for (let dr = 0; dr < k; dr++) {
+        const rr = r * k + dr;
+        if (rr >= hm.rows) break;
+        for (let dc = 0; dc < k; dc++) {
+          const cc = c * k + dc;
+          if (cc >= hm.cols) break;
+          sum += hm.h[rr * hm.cols + cc];
+          n++;
+        }
+      }
+      small[r * cols + c] = n ? sum / n : 0;
+    }
+  }
+
+  const blurred = new Float32Array(cols * rows);
+  blurTile(small, blurred, cols, rows, Math.max(1, radiusCells / k));
+
+  return {
+    cols,
+    rows,
+    cellCm: hm.cellCm * k,
+    originXCm: hm.originXCm + ((k - 1) * hm.cellCm) / 2,
+    originYCm: hm.originYCm + ((k - 1) * hm.cellCm) / 2,
+    data: blurred,
+  };
+}
+
+/** Prélèvement bilinéaire de la surface de référence, en centimètres. */
+export function sampleAo(ao, xCm, yCm) {
+  const gx = (xCm - ao.originXCm) / ao.cellCm;
+  const gy = (yCm - ao.originYCm) / ao.cellCm;
+  const x0 = Math.min(ao.cols - 1, Math.max(0, Math.floor(gx)));
+  const y0 = Math.min(ao.rows - 1, Math.max(0, Math.floor(gy)));
+  const x1 = Math.min(ao.cols - 1, x0 + 1);
+  const y1 = Math.min(ao.rows - 1, y0 + 1);
+  const fx = Math.min(1, Math.max(0, gx - x0));
+  const fy = Math.min(1, Math.max(0, gy - y0));
+  const top = ao.data[y0 * ao.cols + x0] * (1 - fx) + ao.data[y0 * ao.cols + x1] * fx;
+  const bottom = ao.data[y1 * ao.cols + x0] * (1 - fx) + ao.data[y1 * ao.cols + x1] * fx;
+  return top + (bottom - top) * fy;
+}
+
+/**
+ * Rayon d'occlusion, en cellules.
+ *
+ * Il doit être NETTEMENT plus grand qu'une cavité — 2,5 fois ici. À 0,8 fois, la
+ * surface de référence épousait les cavités : l'écart y était le même partout et
+ * l'occlusion devenait un masque binaire, l'image tombait en aplats noirs à bords
+ * durs. Plus large, la référence donne le niveau général du panneau et l'écart
+ * suit la profondeur réelle, en dégradé.
+ */
+export function aoRadiusCells(project, grid) {
+  const basin = project.geometry.basinScaleCm || 40;
+  const aoCm = Math.min(220, Math.max(12, basin * 2.5));
+  return aoCm / grid.cellCm;
 }
 
 // ---- Rééchantillonnage vers la résolution de sortie ----
