@@ -3,14 +3,29 @@
    barres d'outils flottantes) est le lot 7 — la mélanger à la bascule
    d'architecture rendrait toute non-régression invérifiable. */
 
+/* DEUX JEUX DE JETONS COEXISTAIENT, ET AUCUN NE FAISAIT AUTORITÉ.
+   Ce bloc-ci vient de la version 1 ; celui de l'espace de composition
+   professionnel, plus bas, en redéclare les équivalents sous d'autres noms —
+   avec des valeurs voisines mais différentes :
+
+     --accent #d9ff74   contre   --lime #caff54          deux verts
+     --ink    #f4f0e8   contre   --text #f1efe8          deux blancs
+     --line   .11       contre   --hairline .085         deux filets
+
+   La même page portait donc deux verts et deux épaisseurs de filet, selon
+   l'ancienneté du composant. Renommer les jetons partout aurait touché
+   plusieurs centaines de déclarations pour un gain nul ; les faire POINTER sur
+   la référence unique règle la divergence en trois lignes, et rend toute
+   dérive future impossible : il n'y a plus qu'un endroit où la valeur existe.
+   Les noms hérités restent valides, ce sont maintenant des alias. */
 :root {
   color-scheme: dark;
-  --ink: #f4f0e8;
-  --muted: #aaa69d;
-  --line: rgba(255, 255, 255, .11);
+  --ink: var(--text);
+  --muted: var(--text-3);
+  --line: var(--hairline);
   --panel: #1b1b19;
   --panel-2: #22221f;
-  --accent: #d9ff74;
+  --accent: var(--lime);
   --accent-ink: #182006;
   --radius: 18px;
 }
@@ -66,12 +81,9 @@ h1 { margin: 0; font-size: clamp(20px, 3vw, 30px); font-weight: 550; letter-spac
 .btn:active { transform: translateY(0); }
 .btn:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .btn-primary { border-color: transparent; background: var(--accent); color: var(--accent-ink); font-weight: 750; }
-.btn-icon { font-size: 18px; line-height: 1; }
 
 .workspace { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 18px; align-items: stretch; }
 .sidebar { background: linear-gradient(180deg, var(--panel-2), var(--panel)); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
-.sidebar-intro { padding: 20px 20px 15px; }
-.sidebar-intro p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 
 .presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; padding: 0 15px 16px; border-bottom: 1px solid var(--line); }
 .preset { min-height: 44px; padding: 10px 6px; border: 1px solid var(--line); border-radius: 11px; background: rgba(255,255,255,.025); color: var(--muted); font-size: 12px; cursor: pointer; }
@@ -191,7 +203,17 @@ canvas { display: block; width: 100%; height: 100%; }
 .tool-slider input[type="range"] { width: 96px; height: 44px; }
 .tool-slider .tool-slider-value { color: var(--accent); font-variant-numeric: tabular-nums; }
 
-.drawer-toggle { display: none; }
+/* DEUX CLASSES, LA MAUVAISE GAGNAIT.
+   `#drawerToggle` porte `.icon-btn drawer-toggle`. Les deux règles ont la même
+   spécificité, et `.icon-btn { display: inline-grid }` est écrite 340 lignes
+   plus bas : elle l'emportait. Le bouton « Afficher les propriétés » était donc
+   visible À TOUTE LARGEUR, y compris sur un bureau où le panneau est déjà dans
+   la grille. Le cliquer posait le voile sombre sur l'interface entière sans
+   rien ouvrir — plus rien de cliquable, et pour seule sortie Échap ou un clic
+   sur le voile. Vérifié au navigateur à 1440 px, capture à l'appui.
+   La classe composée tranche sans dépendre de l'ordre du fichier ; la règle
+   `#atelier .drawer-toggle` du mode tiroir, plus spécifique, la bat toujours. */
+.icon-btn.drawer-toggle { display: none; }
 .backdrop { position: fixed; inset: 0; z-index: 39; background: rgba(10, 10, 9, .52); opacity: 0; pointer-events: none; transition: opacity .22s ease; }
 .backdrop.show { opacity: 1; pointer-events: auto; }
 .mobile-actions { display: none; }
@@ -201,12 +223,6 @@ canvas { display: block; width: 100%; height: 100%; }
    renvoie la boîte déjà transformée et la conversion pointeur → cm est
    inchangée. `--zoom` sert aux commandes qui ne doivent PAS grossir. */
 .art-wrap { transform-origin: 50% 50%; will-change: transform; }
-
-/* Les deux vues occupent la même boîte ; une seule est visible à la fois. */
-#viewer3d { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-#viewer3d[hidden] { display: none; }
-.art-wrap[data-view="3d"] { background: transparent; box-shadow: none; }
-.art-wrap[data-view="3d"]::after { display: none; }
 
 /* ---- Poignée de redimensionnement physique (§3) ---- */
 
@@ -251,52 +267,7 @@ canvas { display: block; width: 100%; height: 100%; }
 /* ---- Barres aimantées (§14, §15) ---- */
 
 .dock { position: fixed; z-index: 30; }
-.dock--dragging { opacity: .92; }
-.dock--will-snap { outline: 1px solid var(--accent); }
-.dock--collapsed > *:not(.dock-handle) { display: none; }
-.dock--collapsed { padding: 4px; }
 
-.dock-handle {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  min-height: 44px;
-  color: #8f8c85;
-  font-size: 15px;
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-}
-.dock-handle:active { cursor: grabbing; color: var(--accent); }
-
-.dock-guide {
-  position: fixed;
-  z-index: 29;
-  background: var(--accent);
-  opacity: .75;
-  pointer-events: none;
-}
-
-.mini-palette {
-  display: flex;
-  /* L'allongement l'a élargie : elle défile comme la barre principale plutôt
-     que de déborder de l'écran. */
-  max-width: calc(100vw - 24px);
-  overflow-x: auto;
-  scrollbar-width: none;
-  touch-action: pan-x;
-  align-items: center;
-  gap: 4px;
-  padding: 7px;
-  border-radius: 16px;
-  border: 1px solid rgba(255,255,255,.14);
-  background: rgba(20,20,18,.86);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-.mini-palette .tool-slider input[type="range"] { width: 78px; }
 
 /* Brosse directionnelle (§6). L'aperçu est un simple disque déformé par
    `scale` puis pivoté : c'est exactement la construction de l'ellipse du
@@ -364,10 +335,6 @@ canvas { display: block; width: 100%; height: 100%; }
 .export-note { margin: 0; min-height: 32px; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .export-note.warn { color: #e2c05f; }
 
-.variation-actions { display: grid; gap: 7px; padding: 15px; border-bottom: 1px solid var(--line); }
-.variation-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
-.variation-actions .btn { width: 100%; padding: 0 10px; font-size: 12px; }
-.variation-actions .btn:disabled { opacity: .38; cursor: default; transform: none; }
 
 /* ---- Écran de création (§2) ---- */
 
@@ -425,17 +392,20 @@ canvas { display: block; width: 100%; height: 100%; }
    fenêtre de 1 042 px. La rangée est donc bornée à la hauteur visible et c'est
    la colonne de réglages qui défile, comme elle le fait déjà en tiroir sous
    980 px. */
+/* Ce bloc ne garde que ce qui n'est pas réécrit plus bas.
+   `#atelier .sidebar { overflow-y: auto }` était battu par
+   `#atelier .inspector-panel { overflow: hidden }` (même spécificité, plus
+   bas) : le panneau ne défile que par `.inspector-scroll`, et la règle ne
+   servait qu'à le laisser croire. Idem pour les deux `min-height` de la scène,
+   redéfinis à l'identique plus loin. */
 @media (min-width: 981px) {
   #atelier.app { height: 100vh; display: flex; flex-direction: column; }
   #atelier .workspace { flex: 1 1 auto; min-height: 380px; }
-  #atelier .sidebar { overflow-y: auto; }
   /* `min-height: 720px` sur la scène l'emportait sur la hauteur de fenêtre :
      sur un écran de 695 px la rangée valait quand même 720 et l'œuvre repassait
      sous la ligne de flottaison. Sur bureau, c'est la fenêtre qui commande ; le
      plancher de 380 px sur la rangée garde une scène utilisable et laisse la
      page défiler quand la fenêtre est vraiment trop courte. */
-  #atelier .stage-shell { min-height: 0; }
-  #atelier .stage { min-height: 0; }
   /* La marge de 82 px autour de l'œuvre coûte 164 px de hauteur : sur une
      fenêtre courte, elle mangeait l'œuvre elle-même. Elle se resserre quand la
      hauteur manque, sans rien changer aux grandes fenêtres. */
@@ -503,8 +473,6 @@ canvas { display: block; width: 100%; height: 100%; }
 :root {
   --app-bg: #111210;
   --chrome: #181917;
-  --chrome-2: #1d1e1b;
-  --chrome-3: #242521;
   --hairline: rgba(255, 255, 255, .085);
   --hairline-strong: rgba(255, 255, 255, .16);
   --lime: #caff54;
@@ -623,7 +591,6 @@ body { background: var(--app-bg); }
 
 .panel-titlebar h2 { margin: 1px 0 0; font-size: 13px; font-weight: 650; letter-spacing: -.01em; }
 .panel-kicker { display: block; color: var(--text-3); font-size: 8px; font-weight: 750; letter-spacing: .14em; text-transform: uppercase; }
-.panel-count { padding: 4px 7px; border-radius: 4px; background: rgba(255,255,255,.045); color: var(--text-3); font-size: 9px; }
 
 .library-panel {
   grid-column: 1;
@@ -680,29 +647,8 @@ body { background: var(--app-bg); }
 
 .preset-copy { min-width: 0; display: grid; gap: 2px; }
 .preset-copy strong { color: inherit; font-size: 10px; }
-.preset-copy small, .library-action small { color: var(--text-3); font-size: 8px; }
+.preset-copy small { color: var(--text-3); font-size: 8px; }
 
-.library-action {
-  width: 100%;
-  min-height: 50px;
-  display: grid;
-  grid-template-columns: 31px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border: 1px solid var(--hairline);
-  border-radius: 6px;
-  background: #151614;
-  color: var(--text-2);
-  text-align: left;
-  cursor: pointer;
-}
-
-.library-action:hover { border-color: rgba(202,255,84,.35); }
-.library-action > span:nth-child(2) { display: grid; gap: 2px; }
-.library-action strong { font-size: 9px; }
-.library-action-icon { width: 29px; height: 29px; display: grid; place-items: center; border-radius: 5px; background: var(--lime-soft); color: var(--lime); }
-.base-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 7px; }
 #atelier .btn-compact { min-height: 29px; padding: 0 8px; font-size: 9px; }
 #atelier .btn:disabled { opacity: .35; cursor: default; transform: none; }
 
@@ -710,18 +656,31 @@ body { background: var(--app-bg); }
 .library-help p { margin: 0; font-size: 9px; line-height: 1.45; }
 .help-icon { width: 18px; height: 18px; display: grid; place-items: center; border: 1px solid var(--hairline-strong); border-radius: 50%; font-size: 9px; }
 
+/* COLONNE SOUPLE, ET NON GRILLE À QUATRE RANGÉES FIXES.
+   Les quatre rangées imposaient 48 px à la barre d'outils quoi qu'elle
+   contienne, et interdisaient d'y ajouter un cinquième enfant sans décaler
+   toute la colonne. C'est ce qui a rendu nécessaires les masquages en
+   `!important` sous 1180 px : faute de pouvoir grandir, la barre cachait ses
+   commandes. Une colonne flexible laisse la barre passer à deux lignes et la
+   scène prendre le reste ; `min-height: 0` est ce qui autorise la scène à se
+   contracter au lieu de pousser la colonne hors de l'écran. */
 #atelier .stage-shell {
   grid-column: 2;
   grid-row: 1;
   min-width: 0;
   min-height: 0;
-  display: grid;
-  grid-template-rows: 38px 48px minmax(0, 1fr) 31px;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   border: 0;
   border-radius: 0;
   background: #10110f;
 }
+#atelier .stage-shell > .viewer-titlebar,
+#atelier .stage-shell > .toolbar,
+#atelier .stage-shell > .stage-footer,
+#atelier .stage-shell > .mobile-actions { flex: 0 0 auto; }
+#atelier .stage-shell > .stage { flex: 1 1 auto; min-height: 0; }
 
 .viewer-titlebar {
   display: flex;
@@ -749,9 +708,19 @@ body { background: var(--app-bg); }
   min-height: 48px;
   display: flex;
   align-items: center;
+  /* LA BARRE PASSE À LA LIGNE PLUTÔT QUE DE CACHER SES COMMANDES.
+     Elle était en `overflow-x: auto` AVEC la barre de défilement masquée
+     (`scrollbar-width: none`). Mesuré au navigateur : à 1440 px — une largeur
+     d'ordinateur portable très courante — la liste « Symétrie » et l'aperçu de
+     brosse tombaient hors du cadre, atteignables seulement par un défilement
+     horizontal que rien n'annonçait. À 1280 px, « Suit le tracé » les
+     rejoignait. Trois commandes existantes, actives, et invisibles.
+     C'est aussi ce qui obligeait à masquer les réglages avancés sous 1180 px. */
+  flex-wrap: wrap;
+  justify-content: center;
+  row-gap: 2px;
   gap: 5px;
   padding: 4px 8px;
-  overflow-x: auto;
   border: 0;
   border-bottom: 1px solid var(--hairline);
   border-radius: 0;
@@ -759,8 +728,11 @@ body { background: var(--app-bg); }
   backdrop-filter: none;
 }
 
-#atelier .toolbar > .dock-handle { display: none; }
-.tool-group, .brush-options { display: flex; align-items: center; gap: 2px; }
+/* Les deux sous-groupes passent à la ligne eux aussi. Sans cela, la barre
+   pouvait bien s'enrouler, mais un groupe indivisible de cinq curseurs
+   continuait de déborder — 90 px de commandes hors cadre à 390 px de large,
+   mesuré. */
+.tool-group, .brush-options { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 2px; }
 .tool-group.compact { gap: 0; }
 
 #atelier .toolbar .tool {
@@ -976,10 +948,22 @@ body { background: var(--app-bg); }
 .history-actions span { color: var(--text-3); font-size: 8px; }
 .history-buttons { display: flex; gap: 6px; }
 
+/* UN SEUL BLOC PAR POINT DE RUPTURE.
+   Celui-ci était déclaré DEUX fois, à deux cent quatre-vingts lignes d'écart :
+   la moitié des règles d'un même palier vivait ailleurs dans le fichier, et
+   toute retouche demandait de les retrouver. */
 @media (max-width: 1180px) {
   #atelier .pro-workspace { grid-template-columns: 194px minmax(380px, 1fr) 278px; }
   .workspace-tabs { display: none; }
-  .advanced-brush, .brush-options-sep { display: none !important; }
+  #atelier .library-panel { grid-template-rows: 198px minmax(0, 1fr) auto auto; }
+  .project-document { grid-template-columns: 54px 1fr; }
+  .project-thumb { width: 54px; }
+  /* `.advanced-brush, .brush-options-sep { display: none !important }` retirés.
+     La borne à 1180 px coupait la gamme iPad en son milieu : l'iPad 10,9″ en
+     paysage (1180 pt) et l'iPad 10,2″ perdaient allongement, orientation, suivi
+     de tracé et aperçu de brosse, que l'iPad Pro 11″ (1194 pt) gardait — deux
+     produits différents à quatorze points d'écart. La barre passe désormais à
+     la ligne : plus rien à masquer. */
 }
 
 @media (max-width: 920px) {
@@ -999,7 +983,7 @@ body { background: var(--app-bg); }
   #atelier .brand-copy { display: none; }
   #atelier .pro-workspace { height: calc(100vh - 52px); grid-template-columns: 1fr; grid-template-rows: minmax(380px, 1fr) 148px; }
   #atelier .library-panel { display: none; }
-  #atelier .stage-shell { grid-column: 1; grid-row: 1; grid-template-rows: 34px 45px minmax(0, 1fr) 29px; }
+  #atelier .stage-shell { grid-column: 1; grid-row: 1; }
   #atelier .bottom-panel { grid-column: 1; grid-row: 2; }
   #atelier .stage { padding: 22px 16px; }
   #atelier .toolbar .tool { min-width: 38px; padding: 3px 5px; }
@@ -1010,7 +994,7 @@ body { background: var(--app-bg); }
     position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
     overflow: hidden; clip-path: inset(50%); white-space: nowrap;
   }
-  #atelier .brush-options { margin-left: auto; }
+
   #atelier .toolbar .tool-slider input[type="range"] { width: 52px; }
   #atelier .stage-footer .hint { display: none; }
   .document-status > span:not(.status-dot):not(#sizeLabel) { display: none; }
@@ -1082,6 +1066,19 @@ body { background: var(--app-bg); }
   transform: translate(-50%, -50%); pointer-events: none;
 }
 .color-disc-light { flex: 1 1 auto; min-width: 0; }
+
+/* `--teinte` ÉTAIT ÉCRITE ET N'ÉTAIT LUE NULLE PART.
+   `colorDisc.js` la pose sur ce curseur à chaque déplacement — une écriture de
+   style morte à chaque image d'un glissement. L'intention était lisible : le
+   curseur de clarté doit montrer la teinte choisie, du noir au blanc en
+   passant par elle. La règle manquait, elle est là. Le curseur redevient une
+   commande qui se lit sans être bougée. */
+.color-disc-light::-webkit-slider-runnable-track {
+  background: linear-gradient(90deg, #000, var(--teinte, #888) 50%, #fff);
+}
+.color-disc-light::-moz-range-track {
+  background: linear-gradient(90deg, #000, var(--teinte, #888) 50%, #fff);
+}
 
 /* ─────────────────────────────────────────────────────────────────────────
    Pointeur de brosse
@@ -1237,12 +1234,6 @@ body { background: var(--app-bg); }
 
 .generation-strip { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; padding: 5px; border-top: 1px solid var(--hairline); background: #171816; }
 #atelier .generation-strip .btn { min-width: 0; padding: 0 4px; overflow: hidden; font-size: 7px; white-space: nowrap; }
-
-@media (max-width: 1180px) {
-  #atelier .library-panel { grid-template-rows: 198px minmax(0, 1fr) auto auto; }
-  .project-document { grid-template-columns: 54px 1fr; }
-  .project-thumb { width: 54px; }
-}
 
 .active-effect-bar {
   min-height: 44px;

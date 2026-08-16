@@ -66,8 +66,9 @@ const echecs = resultats.filter((r) => !r.ok);
 console.log('─────────────────────────────────────────────');
 console.log(`  ${totalPassees}/${totalVerifs} vérifications sur ${SUITES.length} suites`);
 console.log('');
-console.log('  ⚠ Aucune de ces suites ne couvre l’interface : elle est éprouvée');
-console.log('    par `src/empreinte.js`, dans un navigateur.');
+console.log('  ⚠ Aucune de ces suites ne touche au DOM. L’interface est éprouvée');
+console.log('    par `npm run fumee` (quinze vérifications, navigateur réel) et');
+console.log('    par `src/empreinte.js`.');
 console.log('');
 
 if (echecs.length) {

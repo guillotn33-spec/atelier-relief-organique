@@ -6,6 +6,10 @@
   <meta name="theme-color" content="#171816">
   <meta name="description" content="Atelier de création de reliefs organiques et export PNG haute définition.">
   <title>Atelier de relief organique</title>
+  <!-- Icône en ligne : sans elle, le navigateur demande /favicon.ico à chaque
+       chargement et récolte un 404. Une donnée plutôt qu'un fichier de plus
+       à copier dans dist/. -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23181917'/><text x='16' y='23' font-size='20' text-anchor='middle' fill='%23caff54'>≈</text></svg>">
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
@@ -64,7 +68,7 @@
 
         <section class="effects-pane" aria-labelledby="effectsPaneTitle">
           <div class="panel-titlebar compact-titlebar"><h2 id="effectsPaneTitle">Effets &amp; préréglages</h2><button class="panel-menu" type="button" aria-label="Options des effets">☰</button></div>
-          <label class="effect-search"><span aria-hidden="true">⌕</span><input id="effectSearch" type="search" placeholder="Rechercher des effets" autocomplete="off"></label>
+          <label class="effect-search"><span aria-hidden="true">⌕</span><span class="sr-only">Rechercher un effet</span><input id="effectSearch" type="search" placeholder="Rechercher des effets" autocomplete="off"></label>
           <div class="library-scroll effects-scroll">
             <details class="effect-category prototype-category" open data-effect-category="reference">
               <summary><span>Signatures de référence</span><span class="category-count">3</span></summary>
@@ -78,39 +82,39 @@
             <details class="effect-category" open data-effect-category="form">
               <summary><span>Formes organiques</span><span class="category-count">8</span></summary>
               <div class="effect-list">
-                <button class="effect-item active" type="button" data-effect="organic-relief"><span class="effect-glyph">⌘</span><span>Relief organique</span><span>›</span></button>
-                <button class="effect-item" type="button" data-effect="directional-cavities"><span class="effect-glyph">◎</span><span>Cavités directionnelles</span><span>›</span></button>
-                <button class="effect-item" type="button" data-effect="soft-waves"><span class="effect-glyph">≋</span><span>Vagues douces</span><span>›</span></button>
-                <button class="effect-item" type="button" data-effect="fluid-dunes"><span class="effect-glyph">≈</span><span>Dunes fluides</span><span>›</span></button>
-                <button class="effect-item" type="button" data-effect="progressive-erosion"><span class="effect-glyph">◌</span><span>Érosion progressive</span><span>›</span></button>
-                <button class="effect-item" type="button" data-effect="organic-strata"><span class="effect-glyph">≣</span><span>Strates organiques</span><span>›</span></button>
-                <button class="effect-item" type="button" data-effect="alveoli"><span class="effect-glyph">✺</span><span>Alvéoles</span><span>›</span></button>
-                <button class="effect-item" type="button" data-effect="membrane"><span class="effect-glyph">◉</span><span>Membrane</span><span>›</span></button>
+                <button class="effect-item active" type="button" data-effect="organic-relief"><span class="effect-glyph" aria-hidden="true">⌘</span><span>Relief organique</span><span aria-hidden="true">›</span></button>
+                <button class="effect-item" type="button" data-effect="directional-cavities"><span class="effect-glyph" aria-hidden="true">◎</span><span>Cavités directionnelles</span><span aria-hidden="true">›</span></button>
+                <button class="effect-item" type="button" data-effect="soft-waves"><span class="effect-glyph" aria-hidden="true">≋</span><span>Vagues douces</span><span aria-hidden="true">›</span></button>
+                <button class="effect-item" type="button" data-effect="fluid-dunes"><span class="effect-glyph" aria-hidden="true">≈</span><span>Dunes fluides</span><span aria-hidden="true">›</span></button>
+                <button class="effect-item" type="button" data-effect="progressive-erosion"><span class="effect-glyph" aria-hidden="true">◌</span><span>Érosion progressive</span><span aria-hidden="true">›</span></button>
+                <button class="effect-item" type="button" data-effect="organic-strata"><span class="effect-glyph" aria-hidden="true">≣</span><span>Strates organiques</span><span aria-hidden="true">›</span></button>
+                <button class="effect-item" type="button" data-effect="alveoli"><span class="effect-glyph" aria-hidden="true">✺</span><span>Alvéoles</span><span aria-hidden="true">›</span></button>
+                <button class="effect-item" type="button" data-effect="membrane"><span class="effect-glyph" aria-hidden="true">◉</span><span>Membrane</span><span aria-hidden="true">›</span></button>
               </div>
             </details>
 
             <details class="effect-category" data-effect-category="material">
               <summary><span>Matières</span><span class="category-count">7</span></summary>
               <div class="effect-list">
-                <button class="effect-item" type="button" data-effect="limestone"><span class="effect-swatch limestone"></span><span>Pierre calcaire</span><span>›</span></button>
-                <button class="effect-item" type="button" data-effect="mineral-plaster"><span class="effect-swatch mineral"></span><span>Enduit minéral</span><span>›</span></button>
-                <button class="effect-item" type="button" data-effect="porcelain"><span class="effect-swatch porcelain"></span><span>Porcelaine</span><span>›</span></button>
-                <button class="effect-item" type="button" data-effect="sandstone"><span class="effect-swatch sandstone"></span><span>Grès sable</span><span>›</span></button>
-                <button class="effect-item" type="button" data-effect="terracotta"><span class="effect-swatch terracotta"></span><span>Terre cuite</span><span>›</span></button>
-                <button class="effect-item" type="button" data-effect="graphite"><span class="effect-swatch graphite"></span><span>Graphite</span><span>›</span></button>
-                <button class="effect-item" type="button" data-effect="brushed-metal"><span class="effect-swatch metal"></span><span>Métal brossé</span><span>›</span></button>
+                <button class="effect-item" type="button" data-effect="limestone"><span aria-hidden="true" class="effect-swatch limestone"></span><span>Pierre calcaire</span><span aria-hidden="true">›</span></button>
+                <button class="effect-item" type="button" data-effect="mineral-plaster"><span aria-hidden="true" class="effect-swatch mineral"></span><span>Enduit minéral</span><span aria-hidden="true">›</span></button>
+                <button class="effect-item" type="button" data-effect="porcelain"><span aria-hidden="true" class="effect-swatch porcelain"></span><span>Porcelaine</span><span aria-hidden="true">›</span></button>
+                <button class="effect-item" type="button" data-effect="sandstone"><span aria-hidden="true" class="effect-swatch sandstone"></span><span>Grès sable</span><span aria-hidden="true">›</span></button>
+                <button class="effect-item" type="button" data-effect="terracotta"><span aria-hidden="true" class="effect-swatch terracotta"></span><span>Terre cuite</span><span aria-hidden="true">›</span></button>
+                <button class="effect-item" type="button" data-effect="graphite"><span aria-hidden="true" class="effect-swatch graphite"></span><span>Graphite</span><span aria-hidden="true">›</span></button>
+                <button class="effect-item" type="button" data-effect="brushed-metal"><span aria-hidden="true" class="effect-swatch metal"></span><span>Métal brossé</span><span aria-hidden="true">›</span></button>
               </div>
             </details>
 
             <details class="effect-category" data-effect-category="lighting">
               <summary><span>Éclairage</span><span class="category-count">6</span></summary>
               <div class="effect-list">
-                <button class="effect-item" type="button" data-effect="warm-studio"><span class="effect-swatch warm-light"></span><span>Studio chaud</span><span>›</span></button>
-                <button class="effect-item" type="button" data-effect="grazing-light"><span class="effect-glyph">◐</span><span>Lumière rasante</span><span>›</span></button>
-                <button class="effect-item" type="button" data-effect="soft-diffuse"><span class="effect-glyph">☁</span><span>Diffuse douce</span><span>›</span></button>
-                <button class="effect-item" type="button" data-effect="gallery-white"><span class="effect-glyph">☀</span><span>Galerie blanche</span><span>›</span></button>
-                <button class="effect-item" type="button" data-effect="deep-relief"><span class="effect-glyph">◑</span><span>Relief dramatique</span><span>›</span></button>
-                <button class="effect-item" type="button" data-effect="backlit-halo"><span class="effect-glyph">✦</span><span>Halo arrière</span><span>›</span></button>
+                <button class="effect-item" type="button" data-effect="warm-studio"><span aria-hidden="true" class="effect-swatch warm-light"></span><span>Studio chaud</span><span aria-hidden="true">›</span></button>
+                <button class="effect-item" type="button" data-effect="grazing-light"><span class="effect-glyph" aria-hidden="true">◐</span><span>Lumière rasante</span><span aria-hidden="true">›</span></button>
+                <button class="effect-item" type="button" data-effect="soft-diffuse"><span class="effect-glyph" aria-hidden="true">☁</span><span>Diffuse douce</span><span aria-hidden="true">›</span></button>
+                <button class="effect-item" type="button" data-effect="gallery-white"><span class="effect-glyph" aria-hidden="true">☀</span><span>Galerie blanche</span><span aria-hidden="true">›</span></button>
+                <button class="effect-item" type="button" data-effect="deep-relief"><span class="effect-glyph" aria-hidden="true">◑</span><span>Relief dramatique</span><span aria-hidden="true">›</span></button>
+                <button class="effect-item" type="button" data-effect="backlit-halo"><span class="effect-glyph" aria-hidden="true">✦</span><span>Halo arrière</span><span aria-hidden="true">›</span></button>
               </div>
             </details>
 
@@ -123,7 +127,7 @@
         </section>
 
         <div class="generation-strip">
-          <button class="btn btn-compact" id="newVariation" type="button">✦ Variation</button>
+          <button class="btn btn-compact" id="newVariation" type="button"><span aria-hidden="true">✦</span> Variation</button>
           <button class="btn btn-compact" id="setBase" type="button">Définir base</button>
           <button class="btn btn-compact" id="restoreBase" type="button" disabled>Restaurer</button>
         </div>
@@ -136,13 +140,13 @@
              barre du haut est lui-même masqué sous 920 px, un téléphone n'avait
              plus aucun moyen de lancer une variation. Ils sont désormais dans
              la scène, qui, elle, ne disparaît jamais. -->
-        <div class="mobile-actions"><button class="btn" id="variationMobile" type="button">↻ Variation</button><button class="btn btn-primary" id="exportMobile" type="button">⇩ PNG</button></div>
+        <div class="mobile-actions"><button class="btn" id="variationMobile" type="button"><span aria-hidden="true">↻</span> Variation</button><button class="btn btn-primary" id="exportMobile" type="button"><span aria-hidden="true">⇩</span> PNG</button></div>
         <div class="viewer-titlebar">
           <div class="viewer-breadcrumb"><span>Composition</span><span aria-hidden="true">/</span><strong id="viewerDocumentName">Relief principal</strong></div>
           <div class="viewer-actions"><button class="icon-btn" id="resetView" type="button" title="Ajuster l’œuvre à la fenêtre"><span aria-hidden="true">⌗</span><span class="sr-only">Ajuster à la fenêtre</span></button><span class="zoom-readout" id="zoomReadout">100 %</span></div>
         </div>
 
-        <div class="toolbar dock" id="toolbar" role="toolbar" aria-label="Outils de sculpture">
+        <div class="toolbar dock" id="toolbar" role="group" aria-label="Outils de sculpture">
           <div class="tool-group" aria-label="Outils">
             <button class="tool active" type="button" data-tool="light"><span class="tool-icon" aria-hidden="true">☀</span><span>Lumière</span></button>
             <button class="tool" type="button" data-tool="warp"><span class="tool-icon" aria-hidden="true">〰</span><span>Onduler</span></button>
@@ -189,15 +193,15 @@
             <span class="active-effect-fx" aria-hidden="true">ƒx</span>
             <span><strong id="activeEffectName">Relief organique</strong><small id="activeEffectCategory">Forme organique</small></span>
             <button class="effect-randomize" id="effectRandomize" type="button" title="Créer une variation de cet effet"><span aria-hidden="true">⌘</span><span class="sr-only">Créer une variation de cet effet</span></button>
-            <span class="effect-enabled" role="status" aria-label="Effet actif"><span></span></span>
+            <span class="effect-enabled" aria-hidden="true"><span></span></span>
           </div>
           <section class="quick-controls" aria-labelledby="quickControlsTitle">
             <div class="section-heading"><h3 id="quickControlsTitle">Contrôles essentiels</h3><span>Glisser ou utiliser les flèches</span></div>
             <div class="knob-grid">
-              <button class="param-knob" type="button" role="slider" aria-orientation="vertical" data-control="density" aria-label="Cavités" title="Glissez vers le haut ou la droite pour augmenter"><span class="knob-dial"><span class="knob-indicator"></span></span><strong>Cavités</strong><output class="knob-value">48 %</output></button>
-              <button class="param-knob" type="button" role="slider" aria-orientation="vertical" data-control="basinScaleCm" aria-label="Échelle" title="Glissez vers le haut ou la droite pour augmenter"><span class="knob-dial"><span class="knob-indicator"></span></span><strong>Échelle</strong><output class="knob-value">52 cm</output></button>
-              <button class="param-knob" type="button" role="slider" aria-orientation="vertical" data-control="warpAmount" aria-label="Fluidité" title="Glissez vers le haut ou la droite pour augmenter"><span class="knob-dial"><span class="knob-indicator"></span></span><strong>Fluidité</strong><output class="knob-value">62 %</output></button>
-              <button class="param-knob" type="button" role="slider" aria-orientation="vertical" data-control="depth" aria-label="Profondeur" title="Glissez vers le haut ou la droite pour augmenter"><span class="knob-dial"><span class="knob-indicator"></span></span><strong>Profondeur</strong><output class="knob-value">92 %</output></button>
+              <button class="param-knob" type="button" role="slider" aria-orientation="vertical" data-control="density" aria-label="Cavités" title="Glissez vers le haut ou la droite pour augmenter"><span class="knob-dial"><span class="knob-indicator"></span></span><strong>Cavités</strong><output class="knob-value" aria-hidden="true">48 %</output></button>
+              <button class="param-knob" type="button" role="slider" aria-orientation="vertical" data-control="basinScaleCm" aria-label="Échelle" title="Glissez vers le haut ou la droite pour augmenter"><span class="knob-dial"><span class="knob-indicator"></span></span><strong>Échelle</strong><output class="knob-value" aria-hidden="true">52 cm</output></button>
+              <button class="param-knob" type="button" role="slider" aria-orientation="vertical" data-control="warpAmount" aria-label="Fluidité" title="Glissez vers le haut ou la droite pour augmenter"><span class="knob-dial"><span class="knob-indicator"></span></span><strong>Fluidité</strong><output class="knob-value" aria-hidden="true">62 %</output></button>
+              <button class="param-knob" type="button" role="slider" aria-orientation="vertical" data-control="depth" aria-label="Profondeur" title="Glissez vers le haut ou la droite pour augmenter"><span class="knob-dial"><span class="knob-indicator"></span></span><strong>Profondeur</strong><output class="knob-value" aria-hidden="true">92 %</output></button>
             </div>
           </section>
           <button class="advanced-label" type="button" id="advancedToggle" aria-expanded="false" aria-controls="inspectorSections"><span>Paramètres avancés</span><span class="advanced-chevron" aria-hidden="true">⌄</span></button>
@@ -276,13 +280,13 @@
 
       <section class="bottom-panel panel-shell" aria-label="Calques et variations">
         <div class="bottom-tabs" role="tablist" aria-label="Panneau inférieur">
-          <button class="bottom-tab active" type="button" role="tab" aria-selected="true" data-bottom-tab="layers">Calques</button>
-          <button class="bottom-tab" type="button" role="tab" aria-selected="false" data-bottom-tab="variations">Variations <span class="tab-badge" id="variationCount">1</span></button>
-          <button class="bottom-tab" type="button" role="tab" aria-selected="false" data-bottom-tab="history">Historique</button>
+          <button class="bottom-tab active" type="button" role="tab" id="bottomTabLayers" aria-controls="bottomViewLayers" aria-selected="true" data-bottom-tab="layers">Calques</button>
+          <button class="bottom-tab" type="button" role="tab" id="bottomTabVariations" aria-controls="bottomViewVariations" aria-selected="false" data-bottom-tab="variations">Variations <span class="tab-badge" id="variationCount">1</span></button>
+          <button class="bottom-tab" type="button" role="tab" id="bottomTabHistory" aria-controls="bottomViewHistory" aria-selected="false" data-bottom-tab="history">Historique</button>
           <button class="bottom-collapse" type="button" data-bottom-collapse title="Réduire le panneau"><span aria-hidden="true">⌄</span><span class="sr-only">Réduire le panneau</span></button>
         </div>
         <div class="bottom-content">
-          <div class="bottom-view active" data-bottom-view="layers" role="tabpanel">
+          <div class="bottom-view active" data-bottom-view="layers" role="tabpanel" id="bottomViewLayers" aria-labelledby="bottomTabLayers" tabindex="0">
             <div class="layer-workbench">
               <div class="layers-table">
                 <div class="layer-header"><span></span><span>Nom</span><span>Type</span><span>État</span></div>
@@ -304,8 +308,8 @@
               </div>
             </div>
           </div>
-          <div class="bottom-view" data-bottom-view="variations" role="tabpanel" hidden><div class="variation-strip" id="variationStrip"></div></div>
-          <div class="bottom-view" data-bottom-view="history" role="tabpanel" hidden><div class="history-actions"><div><strong>Historique de sculpture</strong><span>Annule ou rétablit les gestes dessinés sur le relief.</span></div><div class="history-buttons"><button class="btn btn-compact" type="button" data-history-action="undo">↶ Annuler</button><button class="btn btn-compact" type="button" data-history-action="redo">↷ Rétablir</button></div></div></div>
+          <div class="bottom-view" data-bottom-view="variations" role="tabpanel" id="bottomViewVariations" aria-labelledby="bottomTabVariations" tabindex="0" hidden><div class="variation-strip" id="variationStrip"></div></div>
+          <div class="bottom-view" data-bottom-view="history" role="tabpanel" id="bottomViewHistory" aria-labelledby="bottomTabHistory" tabindex="0" hidden><div class="history-actions"><div><strong>Historique de sculpture</strong><span>Annule ou rétablit les gestes dessinés sur le relief.</span></div><div class="history-buttons"><button class="btn btn-compact" type="button" data-history-action="undo"><span aria-hidden="true">↶</span> Annuler</button><button class="btn btn-compact" type="button" data-history-action="redo"><span aria-hidden="true">↷</span> Rétablir</button></div></div></div>
         </div>
       </section>
 
