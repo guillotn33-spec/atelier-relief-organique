@@ -5,6 +5,7 @@
 // effet ne possède de moteur parallèle ni d’état caché.
 
 import { PRESETS, defaultGeometry } from './project.js';
+import { clamp, hexToRgb, mulberry32, rgbToHex } from './math.js';
 
 // CE QUI APPARTIENT AU DOCUMENT, ET NON À L'EFFET.
 //
@@ -51,9 +52,15 @@ export const EFFECTS = {
   'archipel-reference': reference('archipel', 'Masses ouvertes, calibrées sur la troisième photo de référence.'),
 
   // ---- Formes organiques --------------------------------------------------
+  // « Relief organique » EST la composition par défaut, et ne se recopie donc
+  // pas : `geometrieDeLEffet` part déjà de `defaultGeometry()`, si bien que
+  // déclarer la seule famille suffit. La copie précédente avait dérivé —
+  // `channelRatio` à 0,58 contre 0,52 par défaut, allongement 0,42 contre 0,55 —
+  // et un document neuf ne correspondait donc à aucun article du catalogue.
+  // Ne rien recopier rend la divergence impossible.
   'organic-relief': {
     name: 'Relief organique', category: 'form', scope: 'geometry', description: 'Masses souples et cavités fusionnées.',
-    geometry: { family: 'organic', basinScaleCm: 52, channelRatio: 0.58, channelWeight: 0.55, density: 0.48, elongation: 0.42, orientationDeg: 22, warpAmount: 0.62, irregularity: 0.35, depth: 0.92, softness: 0.55, wave: 0.50, shoulder: 0.50, fuse: 0.55 },
+    geometry: { family: 'organic' },
   },
   'directional-cavities': {
     name: 'Cavités directionnelles', category: 'form', scope: 'geometry', description: 'Creux allongés dans une direction dominante.',
@@ -97,7 +104,15 @@ export const EFFECTS = {
   'warm-studio': { name: 'Studio chaud', category: 'lighting', scope: 'shading', description: 'Lumière chaude équilibrée.', lighting: { angle: 232, height: 40, contrast: 0.80, backlight: 0.55, exposureEv: 0.05, shadowStrength: 0.58, cavityOcclusion: 0.52 } },
   'grazing-light': { name: 'Lumière rasante', category: 'lighting', scope: 'shading', description: 'Révèle fortement les bords du relief.', lighting: { angle: 205, height: 19, contrast: 0.88, backlight: 0.32, exposureEv: -0.08, shadowStrength: 0.74, cavityOcclusion: 0.66 } },
   'soft-diffuse': { name: 'Diffuse douce', category: 'lighting', scope: 'shading', description: 'Ombres ouvertes et transitions calmes.', lighting: { angle: 245, height: 61, contrast: 0.56, backlight: 0.45, exposureEv: 0.12, shadowStrength: 0.32, cavityOcclusion: 0.34 } },
-  'gallery-white': { name: 'Galerie blanche', category: 'lighting', scope: 'shading', description: 'Présentation neutre et lumineuse.', lighting: { angle: 260, height: 52, contrast: 0.67, backlight: 0.40, exposureEv: 0.20, shadowStrength: 0.40, cavityOcclusion: 0.42 }, presentation: { wallColor: '#d7d5cf' } },
+  // UN ÉCLAIRAGE N'ÉCRIT QUE DANS `lighting`.
+  //
+  // Celui-ci posait aussi `presentation.wallColor`. Il était le seul des six, et
+  // l'écrasement était COLLANT : la couleur de mur choisie à la main était
+  // perdue au premier clic, et repasser à « Studio chaud » ne la rendait pas —
+  // aucun autre éclairage ne déclare ce champ, donc rien ne le réécrivait. Le
+  // contrat de catégorie vaut mieux que d'être élargi pour un cas particulier,
+  // exactement comme « forme » veut dire « ne touche QUE la géométrie ».
+  'gallery-white': { name: 'Galerie blanche', category: 'lighting', scope: 'shading', description: 'Présentation neutre et lumineuse.', lighting: { angle: 260, height: 52, contrast: 0.67, backlight: 0.40, exposureEv: 0.20, shadowStrength: 0.40, cavityOcclusion: 0.42 } },
   'deep-relief': { name: 'Relief dramatique', category: 'lighting', scope: 'shading', description: 'Noirs profonds et lumière latérale.', lighting: { angle: 218, height: 26, contrast: 0.96, backlight: 0.24, exposureEv: -0.16, shadowStrength: 0.88, cavityOcclusion: 0.86 } },
   'backlit-halo': { name: 'Halo arrière', category: 'lighting', scope: 'shading', description: 'Panneau détaché du mur par la lumière.', lighting: { angle: 242, height: 46, contrast: 0.74, backlight: 0.92, exposureEv: 0.04, shadowStrength: 0.48, cavityOcclusion: 0.48 } },
 };
@@ -127,6 +142,77 @@ function geometrieDeLEffet(project, effect) {
   const garder = effect.category === 'reference' ? ['negative'] : CHAMPS_DU_DOCUMENT;
   for (const champ of garder) geometry[champ] = project.geometry[champ];
   return geometry;
+}
+
+/**
+ * Variation de l'effet ACTIF — la contrepartie de `nextVariation` hors géométrie.
+ *
+ * LE BOUTON MENTAIT. « Créer une variation de cet effet » déléguait à « Nouvelle
+ * variation », qui par contrat ne touche que le bloc `geometry` : sur
+ * « Porcelaine » ou « Halo arrière », il secouait la composition et laissait
+ * l'effet affiché intact. Il faisait donc exactement ce qu'il n'annonçait pas.
+ *
+ * Une matière varie dans sa matière, un éclairage dans sa lumière. Les FORMES et
+ * les RÉFÉRENCES rendent `null` : leur variation est géométrique, c'est
+ * `nextVariation` qui la porte, et la dupliquer ici ferait deux moteurs pour un
+ * même geste.
+ *
+ * Déterministe : même projet et même `effectVariationSeed` donnent le même
+ * résultat, comme pour la variation géométrique.
+ */
+export function varyEffect(project, key = project.ui?.activeEffectKey) {
+  const effect = EFFECTS[key];
+  if (!effect) return null;
+  if (effect.category === 'form' || effect.category === 'reference') return null;
+
+  const graine = mixSeed(project.ui?.effectVariationSeed || 0);
+  const rng = mulberry32(graine);
+  const signe = () => rng() * 2 - 1;
+  const ui = { ...project.ui, effectVariationSeed: graine };
+
+  if (effect.category === 'material') {
+    const [r, v, b] = hexToRgb(project.material.color);
+    // Écart TEINTÉ, pas uniforme : décaler les trois canaux du même montant ne
+    // fait que monter ou descendre la clarté, et douze variations donnent douze
+    // gris de la même couleur. Un écart propre à chaque canal fait dériver la
+    // teinte, ce que l'on attend d'une matière.
+    return {
+      ...project,
+      material: {
+        ...project.material,
+        color: rgbToHex(r + signe() * 14, v + signe() * 14, b + signe() * 14),
+        texture: clamp(project.material.texture + signe() * 0.12, 0, 1),
+      },
+      ui,
+      updatedAt: Date.now(),
+    };
+  }
+
+  // Éclairage. L'angle fait le tour, les autres réglages sont bornés comme
+  // leurs curseurs.
+  const angle = (Math.round(project.lighting.angle + signe() * 24) % 360 + 360) % 360;
+  return {
+    ...project,
+    lighting: {
+      ...project.lighting,
+      angle,
+      height: clamp(Math.round(project.lighting.height + signe() * 9), 15, 80),
+      contrast: clamp(project.lighting.contrast + signe() * 0.09, 0.2, 1),
+      backlight: clamp(project.lighting.backlight + signe() * 0.14, 0, 1),
+      shadowStrength: clamp((project.lighting.shadowStrength ?? 0.55) + signe() * 0.12, 0, 1),
+      cavityOcclusion: clamp((project.lighting.cavityOcclusion ?? 0.5) + signe() * 0.12, 0, 1),
+    },
+    ui,
+    updatedAt: Date.now(),
+  };
+}
+
+/** Même brassage que `variation.js` — une graine voisine donne une suite étrangère. */
+function mixSeed(value) {
+  let h = (value | 0) + 0x9e3779b9;
+  h = Math.imul(h ^ (h >>> 16), 2246822507);
+  h = Math.imul(h ^ (h >>> 13), 3266489909);
+  return (h ^ (h >>> 16)) >>> 0;
 }
 
 export function applyEffect(project, key) {

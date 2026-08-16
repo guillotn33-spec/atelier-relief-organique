@@ -13,13 +13,29 @@ function quantize(value, min, step) {
   return Number(snapped.toFixed(6));
 }
 
+/**
+ * Minuscules SANS accents, pour la recherche.
+ *
+ * `toLocaleLowerCase` seul laissait « alveole » sans réponse alors que
+ * « Alvéoles » est au catalogue, et « erosion » sans réponse pour « Érosion
+ * progressive ». Or c'est exactement ainsi que l'on tape dans un champ de
+ * recherche. La décomposition NFD sépare la lettre de son accent, que la classe
+ * des diacritiques combinants retire ensuite.
+ */
+function replierAccents(texte) {
+  return texte.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('fr');
+}
+
 export class ProWorkspace {
-  constructor(root, { lire, onRestoreVariation, onWorkspaceMode, onApplyEffect } = {}) {
+  constructor(root, { lire, onRestoreVariation, onWorkspaceMode, onApplyEffect, onVaryEffect } = {}) {
     this.root = root;
     this.lire = lire;
     this.onRestoreVariation = onRestoreVariation;
     this.onWorkspaceMode = onWorkspaceMode;
     this.onApplyEffect = onApplyEffect;
+    // Rend `true` si l'effet actif a su varier tout seul, `false` sinon — auquel
+    // cas la variation géométrique prend le relais.
+    this.onVaryEffect = onVaryEffect;
     const savedVariations = lire?.()?.ui?.variationSnapshots;
     this.variations = Array.isArray(savedVariations) ? clone(savedVariations).slice(-8) : [];
     this.drag = null;
@@ -177,43 +193,69 @@ export class ProWorkspace {
     });
 
     const search = this.root.querySelector('#effectSearch');
+    // État de dépliage AVANT toute recherche. Sans lui, « Matières » et
+    // « Éclairage » — fermées au chargement — restaient ouvertes une fois la
+    // requête effacée : la recherche les avait dépliées et rien ne les
+    // refermait. Le panneau ne revenait jamais à son état de repos.
+    const ouvertAuRepos = new Map();
+    this.root.querySelectorAll('.effect-category').forEach((c) => ouvertAuRepos.set(c, c.open));
+
     search?.addEventListener('input', () => {
-      const query = search.value.trim().toLocaleLowerCase('fr');
+      const query = replierAccents(search.value.trim());
       this.root.querySelectorAll('.effect-item, .prototype-category .preset-card').forEach((item) => {
         // Le `title` porte « nom — description » : chercher « rasante » ou
         // « alvéol » trouve donc aussi les articles dont seule la description le
         // dit. Le texte visible seul ne suffisait pas.
-        const matiere = `${item.textContent} ${item.title || ''}`.toLocaleLowerCase('fr');
+        const matiere = replierAccents(`${item.textContent} ${item.title || ''}`);
         item.hidden = query.length > 0 && !matiere.includes(query);
       });
       this.root.querySelectorAll('.effect-category').forEach((category) => {
-        const visible = [...category.querySelectorAll('.effect-item, .preset-card')].some((item) => !item.hidden);
-        category.hidden = query.length > 0 && !visible;
-        if (query && visible) category.open = true;
+        const articles = [...category.querySelectorAll('.effect-item, .preset-card')];
+        const restants = articles.filter((item) => !item.hidden).length;
+        category.hidden = query.length > 0 && restants === 0;
+        // LE COMPTEUR SUIT LE FILTRE. Il annonçait le total du catalogue quoi
+        // qu'il arrive : une recherche qui ne laissait qu'une matière affichait
+        // toujours « 7 » en face d'un seul article visible.
+        const compteur = category.querySelector('.category-count');
+        if (compteur) compteur.textContent = String(query.length > 0 ? restants : articles.length);
+        category.open = query.length > 0 ? restants > 0 : (ouvertAuRepos.get(category) ?? category.open);
       });
     }, { signal: this.signal });
 
-    this.root.querySelector('#effectRandomize')?.addEventListener('click', () => this.root.querySelector('#newVariation')?.click(), { signal: this.signal });
+    this.root.querySelector('#effectRandomize')?.addEventListener('click', () => {
+      // Une FORME ou une RÉFÉRENCE varie par sa géométrie : c'est « Nouvelle
+      // variation », le même geste et le même moteur. Une matière ou un
+      // éclairage varie dans son propre bloc — voir `varyEffect`. Le bouton
+      // déléguait tout au premier cas, y compris sur « Porcelaine », où il
+      // secouait la composition sans rien changer à l'effet qu'il annonçait.
+      if (this.onVaryEffect?.() === true) return;
+      this.root.querySelector('#newVariation')?.click();
+    }, { signal: this.signal });
   }
 
   syncEffectStore() {
     const project = this.lire?.();
     if (!project) return;
-    const key = project.ui?.activeEffectKey || 'organic-relief';
-    this.root.querySelectorAll('.effect-item[data-effect]').forEach((button) => button.classList.toggle('active', button.dataset.effect === key));
+    // `activeEffectKey` peut être NUL, et ce n'est pas un défaut : une variation
+    // fait descendre la composition d'un article sans qu'elle en soit encore un.
+    // Le repli précédent sur « organic-relief » rallumait alors une vignette qui
+    // ne correspondait plus à ce qui est rendu.
+    const key = project.ui?.activeEffectKey || null;
+    this.root.querySelectorAll('.effect-item[data-effect]').forEach((button) => button.classList.toggle('active', key !== null && button.dataset.effect === key));
     const name = this.root.querySelector('#activeEffectName');
     const category = this.root.querySelector('#activeEffectCategory');
-    if (name) name.textContent = project.ui?.activeEffectName || 'Relief organique';
+    if (name) name.textContent = project.ui?.activeEffectName || project.ui?.designName || 'Composition';
     // `[data-effect]` et non `.effect-item[data-effect]` : les trois vignettes de
     // prototype portent désormais la clé de leur signature de référence, et sont
     // donc des entrées du catalogue à part entière.
-    const selected = this.root.querySelector(`[data-effect="${key}"]`)?.closest('[data-effect-category]');
+    const selected = key === null ? null : this.root.querySelector(`[data-effect="${key}"]`)?.closest('[data-effect-category]');
     const type = selected?.dataset.effectCategory;
     if (category) {
-      category.textContent = type === 'material' ? 'Matière'
-        : type === 'lighting' ? 'Éclairage'
-          : type === 'reference' ? 'Signature de référence'
-            : 'Forme organique';
+      category.textContent = key === null ? 'Composition libre'
+        : type === 'material' ? 'Matière'
+          : type === 'lighting' ? 'Éclairage'
+            : type === 'reference' ? 'Signature de référence'
+              : 'Forme organique';
     }
   }
 

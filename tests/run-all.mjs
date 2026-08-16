@@ -32,7 +32,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 // retrait du périmètre 3D : trois d'entre elles gardaient des fonctions absentes
 // du bundle, et un total unique le masquait. Ces suites sont parties avec le
 // code qu'elles éprouvaient.
-const SUITES = ['nonregression', 'engine', 'gestures', 'dimensions', 'brush', 'image', 'shading', 'heightmap', 'effects'];
+const SUITES = ['nonregression', 'engine', 'gestures', 'dimensions', 'brush', 'image', 'shading', 'heightmap', 'effects', 'robustesse'];
 
 const verbose = process.argv.includes('--verbose');
 const resultats = [];

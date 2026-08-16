@@ -8,7 +8,7 @@
 
 import { clamp } from '../core/math.js';
 import { BOUNDS, PRESETS, applyPreset, aspectOf, baseGeometryOf, captureBase, fitLockedSize } from '../core/project.js';
-import { EFFECTS, applyEffect } from '../core/effects.js';
+import { EFFECTS, applyEffect, varyEffect } from '../core/effects.js';
 import { GestureManager, ROLE } from './gestures.js';
 import { Viewport } from './viewport.js';
 import { nextVariation } from '../geometry/variation.js';
@@ -202,6 +202,20 @@ export class Atelier {
           this.proWorkspace.openInspector('composition');
         }
         this.scheduleSaveProject();
+      },
+      // Variation de l'effet ACTIF quand il sait varier tout seul — une matière
+      // ou un éclairage. Rend `true` dans ce cas, et la boutique s'arrête là ;
+      // `false` laisse « Nouvelle variation » reprendre la main pour les formes,
+      // dont la variation EST géométrique.
+      onVaryEffect: () => {
+        const suivant = varyEffect(this.project);
+        if (!suivant) return false;
+        this.project = suivant;
+        this.syncControlsFromProject();
+        this.updateEnvironment();
+        this.render();
+        this.scheduleSaveProject();
+        return true;
       },
       onApplyEffect: (key) => {
         const effect = EFFECTS[key];
@@ -944,7 +958,16 @@ export class Atelier {
     this.project.geometry = nextVariation(this.project.geometry);
     this.project.ui.presetKey = null;
     this.project.ui.designName = 'Variation ' + String(this.project.geometry.variationSeed).slice(-4);
+    // LA BARRE D'EFFET ACTIF DOIT LÂCHER PRISE ICI.
+    //
+    // Elle gardait « Alvéoles » sur une géométrie qui en avait dérivé de dix
+    // variations : `presetKey` et `designName` étaient remis à jour, pas
+    // `activeEffectKey`. La composition n'est plus celle de l'article, elle en
+    // descend — c'est ce que dit `designName`, et c'est la seule chose vraie.
+    this.project.ui.activeEffectKey = null;
+    this.project.ui.activeEffectName = this.project.ui.designName;
     this.root.querySelectorAll('.preset').forEach((b) => b.classList.remove('active'));
+    this.root.querySelectorAll('.effect-item[data-effect]').forEach((b) => b.classList.remove('active'));
     this.syncControlsFromProject();
     this.rebuild();
     this.scheduleSaveProject();
@@ -1111,9 +1134,17 @@ export class Atelier {
   // ---- Divers ----
 
   bindMisc() {
-    this.root.querySelectorAll('.preset').forEach((button) => {
+    // UN SEUL CHEMIN POUR CHARGER UNE SIGNATURE DE RÉFÉRENCE.
+    //
+    // Les trois vignettes passaient par `applyPreset` pendant que le reste du
+    // catalogue passait par `applyEffect`. Les deux produisent aujourd'hui la
+    // même géométrie — vérifié champ par champ — mais c'étaient deux
+    // implémentations à tenir en phase, et seule la seconde met à jour la barre
+    // « effet actif ». La vignette cliquée n'y apparaissait donc jamais.
+    this.root.querySelectorAll('.preset[data-preset]').forEach((button) => {
       this.ecouter(button, 'click', () => {
-        this.project = applyPreset(this.project, button.dataset.preset);
+        const cle = `${button.dataset.preset}-reference`;
+        this.project = EFFECTS[cle] ? applyEffect(this.project, cle) : applyPreset(this.project, button.dataset.preset);
         this.syncControlsFromProject();
         this.rebuild();
         this.scheduleSaveProject();
@@ -1297,6 +1328,10 @@ export class Atelier {
     this.store.destroy();
     this.listeners.abort();
     this.proWorkspace?.destroy();
+    // La boutique tenait une file de vingt-sept rendus et un cache. Rien ne
+    // l'arrêtait ici : un atelier fermé continuait de calculer des vignettes
+    // pour un DOM que l'atelier suivant était en train de reprendre.
+    this.boutique?.destroy();
   }
 }
 

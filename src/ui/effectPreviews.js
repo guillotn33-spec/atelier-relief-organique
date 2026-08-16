@@ -88,6 +88,21 @@ export class EffectPreviews {
     this.cache = createRenderCache();
     this.file = [];
     this.enCours = false;
+    this.abandonne = false;
+  }
+
+  /**
+   * Abandonne la file et libère le cache.
+   *
+   * `signal` couvrait déjà l'abandon de l'atelier, mais rien ne l'appelait
+   * depuis `Atelier.destroy()` : la file d'un atelier fermé continuait de
+   * tourner tant que le signal n'était pas déclenché, et son cache de rendu
+   * restait vivant. Un point d'entrée explicite vaut mieux qu'un effet de bord.
+   */
+  destroy() {
+    this.abandonne = true;
+    this.file.length = 0;
+    this.cache = null;
   }
 
   /**
@@ -101,7 +116,17 @@ export class EffectPreviews {
       const effet = EFFECTS[cle];
       if (!effet) continue;
 
-      const ancien = bouton.querySelector('.effect-glyph, .effect-swatch');
+      // `.effect-thumb` FAIT PARTIE DE LA RECHERCHE, et c'est le point entier.
+      //
+      // `monter()` est appelé une fois par atelier, mais l'atelier est reconstruit
+      // sur le MÊME `#atelier` à chaque ouverture de projet (voir `main.js`).
+      // Au second passage, le glyphe d'origine n'existe plus — il a été remplacé
+      // par une toile — donc la recherche ne trouvait rien et le `else` AJOUTAIT
+      // une seconde toile au lieu de remplacer la première. Un canevas de plus
+      // par article et par ouverture, et surtout une mise en page cassée dès la
+      // deuxième : `.effect-item` est une grille à trois colonnes fixes, un
+      // quatrième enfant y pousse le texte dans la colonne du chevron.
+      const ancien = bouton.querySelector('.effect-glyph, .effect-swatch, .effect-thumb');
       const toile = this.toile(46, 29);
       if (ancien) ancien.replaceWith(toile);
       else bouton.prepend(toile);
@@ -110,7 +135,7 @@ export class EffectPreviews {
       // même texte finissent toujours par diverger, et c'est la copie visible
       // qui ment.
       const libelle = bouton.querySelector('span:nth-child(2)');
-      if (libelle && !libelle.querySelector('.effect-copy')) {
+      if (libelle && !libelle.classList.contains('effect-copy')) {
         const copie = document.createElement('span');
         copie.className = 'effect-copy';
         const nom = document.createElement('strong');
@@ -166,7 +191,7 @@ export class EffectPreviews {
       ? (fn) => window.requestIdleCallback(fn, { timeout: 300 })
       : (fn) => setTimeout(fn, 0);
     const suivant = () => {
-      if (this.signal?.aborted) { this.enCours = false; return; }
+      if (this.abandonne || this.signal?.aborted) { this.enCours = false; return; }
       const tache = this.file.shift();
       if (!tache) { this.enCours = false; return; }
       try {

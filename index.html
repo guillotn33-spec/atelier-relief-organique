@@ -69,7 +69,7 @@
             <details class="effect-category prototype-category" open data-effect-category="reference">
               <summary><span>Signatures de référence</span><span class="category-count">3</span></summary>
               <div class="preset-grid presets" aria-label="Signatures de référence">
-                <button class="preset preset-card active" type="button" data-preset="dunes" data-effect="dunes-reference"><span class="preset-art preset-art-dunes" aria-hidden="true"></span><span class="preset-copy"><strong>Dunes</strong><small>Strates fluides</small></span></button>
+                <button class="preset preset-card" type="button" data-preset="dunes" data-effect="dunes-reference"><span class="preset-art preset-art-dunes" aria-hidden="true"></span><span class="preset-copy"><strong>Dunes</strong><small>Strates fluides</small></span></button>
                 <button class="preset preset-card" type="button" data-preset="cellules" data-effect="cellules-reference"><span class="preset-art preset-art-cellules" aria-hidden="true"></span><span class="preset-copy"><strong>Cellules</strong><small>Cavités alvéolaires</small></span></button>
                 <button class="preset preset-card" type="button" data-preset="archipel" data-effect="archipel-reference"><span class="preset-art preset-art-archipel" aria-hidden="true"></span><span class="preset-copy"><strong>Archipel</strong><small>Masses ouvertes</small></span></button>
               </div>
@@ -127,10 +127,16 @@
           <button class="btn btn-compact" id="setBase" type="button">Définir base</button>
           <button class="btn btn-compact" id="restoreBase" type="button" disabled>Restaurer</button>
         </div>
-        <div class="mobile-actions"><button class="btn" id="variationMobile" type="button">↻ Variation</button><button class="btn btn-primary" id="exportMobile" type="button">⇩ PNG</button></div>
       </aside>
 
       <section class="stage-shell" aria-label="Aperçu du relief">
+        <!-- Ces deux boutons vivaient dans la colonne de gauche, affichés sous
+             620 px — or cette colonne entière disparaît dès 700 px. Ils étaient
+             donc inatteignables à TOUTE largeur, et comme « Variation » de la
+             barre du haut est lui-même masqué sous 920 px, un téléphone n'avait
+             plus aucun moyen de lancer une variation. Ils sont désormais dans
+             la scène, qui, elle, ne disparaît jamais. -->
+        <div class="mobile-actions"><button class="btn" id="variationMobile" type="button">↻ Variation</button><button class="btn btn-primary" id="exportMobile" type="button">⇩ PNG</button></div>
         <div class="viewer-titlebar">
           <div class="viewer-breadcrumb"><span>Composition</span><span aria-hidden="true">/</span><strong id="viewerDocumentName">Relief principal</strong></div>
           <div class="viewer-actions"><button class="icon-btn" id="resetView" type="button" title="Ajuster l’œuvre à la fenêtre"><span aria-hidden="true">⌗</span><span class="sr-only">Ajuster à la fenêtre</span></button><span class="zoom-readout" id="zoomReadout">100 %</span></div>
@@ -181,7 +187,7 @@
         <div class="inspector-scroll">
           <div class="active-effect-bar">
             <span class="active-effect-fx" aria-hidden="true">ƒx</span>
-            <span><strong id="activeEffectName">Dunes fluides</strong><small id="activeEffectCategory">Forme organique</small></span>
+            <span><strong id="activeEffectName">Relief organique</strong><small id="activeEffectCategory">Forme organique</small></span>
             <button class="effect-randomize" id="effectRandomize" type="button" title="Créer une variation de cet effet"><span aria-hidden="true">⌘</span><span class="sr-only">Créer une variation de cet effet</span></button>
             <span class="effect-enabled" role="status" aria-label="Effet actif"><span></span></span>
           </div>

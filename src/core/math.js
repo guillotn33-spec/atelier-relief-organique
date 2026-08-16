@@ -22,6 +22,12 @@ export function hexToRgb(hex) {
   return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
 }
 
+/** Réciproque de `hexToRgb` — sortie toujours en sept caractères, minuscules. */
+export function rgbToHex(r, g, b) {
+  const octet = (v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+  return `#${octet(r)}${octet(g)}${octet(b)}`;
+}
+
 /** Générateur déterministe — même graine, même suite. */
 export function mulberry32(a) {
   return function () {

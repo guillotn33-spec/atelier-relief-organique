@@ -1,7 +1,7 @@
 // Amorçage : écran de création ou reprise du dernier projet.
 
 import './styles.css';
-import { createProject, defaultCamera, defaultGeometry, defaultLighting, defaultMaterial, defaultPresentation, defaultUi } from './core/project.js';
+import { createProject, defaultCamera, defaultGeometry, defaultLighting, defaultMaterial, defaultPresentation, defaultUi, validateGeometry } from './core/project.js';
 import { SculptLayer, cellSizeFor } from './sculpt/layer.js';
 import { CreationScreen } from './ui/creation.js';
 import { Atelier } from './ui/atelier.js';
@@ -27,10 +27,14 @@ function hydrate(stored) {
     name: stored.name,
   });
   const storedGeometry = stored.geometry || {};
+  // La géométrie relue passe par la MÊME porte que les dimensions : elle est
+  // validée, pas seulement complétée. Un `{ ...defaults, ...stored }` recopiait
+  // un NaN tel quel, et un seul NaN suffit à rendre la heightmap entière NaN —
+  // toile vide, sans exception ni message. Voir `validateGeometry`.
   const geometry =
     storedGeometry.engine === 'legacy-v1'
-      ? { ...defaultGeometry(), seed: storedGeometry.seed ?? defaultGeometry().seed }
-      : { ...defaultGeometry(), ...storedGeometry };
+      ? { ...defaultGeometry(), seed: Number.isFinite(Number(storedGeometry.seed)) ? Number(storedGeometry.seed) | 0 : defaultGeometry().seed }
+      : validateGeometry(storedGeometry);
   return {
     ...base,
     ...stored,

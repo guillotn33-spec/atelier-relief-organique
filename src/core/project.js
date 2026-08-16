@@ -151,6 +151,79 @@ export const GEOMETRY_BOUNDS = {
   fuse: [0, 1],
 };
 
+/**
+ * BORNES ADMISSIBLES — à ne pas confondre avec `GEOMETRY_BOUNDS`.
+ *
+ * `GEOMETRY_BOUNDS` est la plage que la VARIATION explore d'elle-même ; celle-ci
+ * est la plage qu'une valeur a le droit d'occuper, quelle qu'en soit l'origine.
+ * Les deux diffèrent largement : le curseur de densité va de 5 à 95 % quand la
+ * variation n'explore que 18 à 72 %.
+ *
+ * La distinction n'est pas théorique. Valider un enregistrement contre
+ * `GEOMETRY_BOUNDS` ramènerait une densité réglée à la main à 90 % vers 72 % à
+ * la simple réouverture du projet — la validation effacerait le travail qu'elle
+ * est censée protéger. Et `defaultGeometry().channelRatio` vaut 0,52, hors de
+ * son propre intervalle de variation [0,55 ; 0,90] : la géométrie par défaut
+ * elle-même aurait été « corrigée ».
+ *
+ * Ces bornes-ci sont donc celles des curseurs de l'interface, et pour les deux
+ * paramètres sans curseur (`channelRatio`, `fuse`) l'étendue où le moteur reste
+ * défini.
+ */
+export const GEOMETRY_LIMITS = {
+  basinScaleCm: [8, 160],
+  channelRatio: [0.3, 1],
+  channelWeight: [0, 1],
+  density: [0.05, 0.95],
+  elongation: [0, 1],
+  orientationDeg: [0, 180],
+  warpAmount: [0, 1],
+  irregularity: [0, 1],
+  depth: [0.2, 1],
+  softness: [0.05, 1],
+  wave: [0, 1],
+  shoulder: [0.05, 1],
+  fuse: [0, 1],
+};
+
+/**
+ * Assainit une géométrie relue d'un enregistrement.
+ *
+ * LES DIMENSIONS ÉTAIENT VALIDÉES, PAS LA GÉOMÉTRIE. `validateDimension` rejette
+ * NaN, le vide et le hors-bornes depuis le lot 1 ; les quatorze paramètres du
+ * relief, eux, étaient recopiés tels quels depuis la base. Or un seul NaN suffit
+ * à tout éteindre : `Math.max(2, NaN)` vaut NaN — la garde de `makeFieldContext`
+ * ne protège de rien — donc `invBasin` est NaN, donc la heightmap entière est
+ * NaN, et l'atelier s'ouvre sur une toile vide, sans exception ni message.
+ *
+ * Chaque champ numérique hors bornes est ramené dans l'intervalle canonique ;
+ * chaque champ absent, non fini ou du mauvais type reprend sa valeur par défaut.
+ * Les champs libres — graine, décalages de domaine — sont seulement contrôlés en
+ * finitude : ils n'ont pas de plage.
+ */
+export function validateGeometry(raw) {
+  const base = defaultGeometry();
+  if (!raw || typeof raw !== 'object') return base;
+  const out = { ...base };
+
+  for (const [cle, [lo, hi]] of Object.entries(GEOMETRY_LIMITS)) {
+    const valeur = Number(raw[cle]);
+    if (Number.isFinite(valeur)) out[cle] = Math.max(lo, Math.min(hi, valeur));
+  }
+  for (const cle of ['seed', 'variationSeed']) {
+    const valeur = Number(raw[cle]);
+    if (Number.isFinite(valeur)) out[cle] = valeur | 0;
+  }
+  for (const cle of ['domainOffsetXCm', 'domainOffsetYCm']) {
+    const valeur = Number(raw[cle]);
+    if (Number.isFinite(valeur)) out[cle] = valeur;
+  }
+  if (typeof raw.engine === 'string') out.engine = raw.engine;
+  if (typeof raw.family === 'string') out.family = raw.family;
+  out.negative = !!raw.negative;
+  return out;
+}
+
 export function defaultMaterial() {
   return { color: '#e8e4dc', texture: 0.3, finish: 'mat' };
 }
@@ -195,10 +268,27 @@ export function defaultUi() {
     // 'xy'. Elle ne concerne QUE les gestes ; le relief généré, lui, n'est pas
     // miroité — sans quoi choisir une symétrie changerait la composition.
     symmetry: 'none',
-    presetKey: 'dunes',
-    designName: 'Dunes',
-    activeEffectKey: 'fluid-dunes',
-    activeEffectName: 'Dunes fluides',
+    // UN DOCUMENT NEUF NE PORTE AUCUN PRÉRÉGLAGE.
+    //
+    // Il déclarait `presetKey: 'dunes'` et `activeEffectKey: 'fluid-dunes'`
+    // alors que `defaultGeometry()` n'est ni l'un ni l'autre — famille
+    // `organic` à 52 cm, quand « Dunes » est à 38 cm et « Dunes fluides » de la
+    // famille `dunes` à 43 cm. Trois désignations pour un seul relief : la
+    // vignette allumée, le nom d'effet affiché et l'image rendue se
+    // contredisaient dès l'ouverture.
+    //
+    // La géométrie par défaut EST « Relief organique » — l'article du catalogue
+    // ne déclare plus que sa famille et hérite du reste, si bien que les deux
+    // ne peuvent plus diverger. Aucune vignette de RÉFÉRENCE n'est allumée,
+    // puisqu'aucune des trois n'est chargée.
+    presetKey: null,
+    designName: 'Relief organique',
+    activeEffectKey: 'organic-relief',
+    activeEffectName: 'Relief organique',
+    // Suite de variation propre aux effets de matière et d'éclairage. Elle est
+    // distincte de `geometry.variationSeed` : varier une lumière ne doit pas
+    // avancer la suite qui explore les compositions.
+    effectVariationSeed: 0,
 
     // Verrou du rapport largeur/hauteur (§3). Le carré et le rond l'imposent
     // par définition ; ce réglage ne concerne donc que le rectangle.
