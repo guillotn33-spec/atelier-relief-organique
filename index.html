@@ -191,6 +191,39 @@
         </details>
 
         <details>
+          <summary>Export</summary>
+          <div class="control-list">
+            <label class="control">
+              <span class="control-head"><span>Format</span></span>
+              <select class="select" id="exportFormat">
+                <option value="png">Image PNG</option>
+                <option value="jpeg">Image JPEG</option>
+                <option value="usdz">Modèle USDZ (iPad, Procreate)</option>
+                <option value="obj">Modèle OBJ + MTL</option>
+              </select>
+            </label>
+            <label class="control" id="exportSizeControl">
+              <span class="control-head"><span>Grand côté</span></span>
+              <select class="select" id="exportLongSide">
+                <option value="2048">2048 px</option>
+                <option value="4096">4096 px</option>
+                <option value="custom">Sur mesure…</option>
+              </select>
+            </label>
+            <label class="control" id="exportCustomControl" hidden>
+              <span class="control-head"><span>Définition</span><output class="control-value" id="exportCustomValue"></output></span>
+              <input type="range" id="exportCustom" min="512" max="8192" step="128" value="3072">
+            </label>
+            <label class="switch-row" for="exportTransparent" id="exportTransparentControl" hidden>
+              <span>Fond transparent</span>
+              <span class="switch"><input type="checkbox" id="exportTransparent"><span aria-hidden="true"></span></span>
+            </label>
+            <p class="export-note" id="exportNote"></p>
+            <button class="btn btn-primary" id="exportRun" type="button">Exporter</button>
+          </div>
+        </details>
+
+        <details>
           <summary>Lumière &amp; présentation</summary>
           <div class="control-list">
             <label class="control">

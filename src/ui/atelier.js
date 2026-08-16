@@ -12,6 +12,8 @@ import { GestureManager, ROLE } from './gestures.js';
 import { Viewport } from './viewport.js';
 import { Dock } from './dock.js';
 import { Viewer3D } from '../render3d/viewer.js';
+import { encode, fileNameFor, outputSizeFor, renderForExport } from '../export/image.js';
+import { EXPORT_MAX_TRIANGLES, exportObj, exportUsdz, fileBaseFor } from '../export/model.js';
 import { nextVariation } from '../geometry/variation.js';
 import { buildHeightmap, updateHeightmapRect } from '../geometry/heightmap.js';
 import { SwellAnimator } from '../geometry/animator.js';
@@ -139,6 +141,7 @@ export class Atelier {
     this.bindGestures();
     this.bindResizeHandle();
     this.bindDocks();
+    this.bindExport();
     this.bindMisc();
 
     this.syncControlsFromProject();
@@ -269,6 +272,9 @@ export class Atelier {
       lock.hidden = shapeLocked;
       lock.setAttribute('aria-pressed', String(!!this.project.ui.ratioLocked));
     }
+    // La transparence d'export ne concerne que le disque : le panneau d'export
+    // doit suivre un changement de forme.
+    if (this.exportFormat) this.refreshExportPanel();
   }
 
   updateEnvironment() {
@@ -948,9 +954,6 @@ export class Atelier {
     this.root.querySelector('#setBase').addEventListener('click', () => this.setBase());
     this.root.querySelector('#restoreBase').addEventListener('click', () => this.restoreBase());
 
-    const exportPng = (event) => this.exportPng(event.currentTarget);
-    this.root.querySelector('#exportTop').addEventListener('click', exportPng);
-    this.root.querySelector('#exportMobile').addEventListener('click', exportPng);
 
     this.root.querySelector('#newProject').addEventListener('click', () => this.onNewProject());
 
@@ -1062,36 +1065,106 @@ export class Atelier {
     ctx.drawImage(this.anim.canvas, 0, 0, this.canvas.width, this.canvas.height);
   }
 
-  // ---- Export ----
-  // §17 (PNG/JPEG, résolutions au choix, transparence du rond) est le lot 6.
-  // Au lot 1 on supprime seulement le 1920 × 1200 câblé : la sortie respecte
-  // désormais le rapport réel du projet.
+  // ---- Export (§17, §18) ----
+  //
+  // Images et modèles partent de la MÊME heightmap que l'écran. Il n'existe pas
+  // de « géométrie d'export » : c'est la seule façon sûre de ne jamais livrer,
+  // comme l'interdit §18, une image plaquée sur un rectangle plat.
 
-  async exportPng(button) {
-    const original = button.innerHTML;
+  bindExport() {
+    this.exportFormat = this.root.querySelector('#exportFormat');
+    this.exportLongSide = this.root.querySelector('#exportLongSide');
+    this.exportCustom = this.root.querySelector('#exportCustom');
+    this.exportNote = this.root.querySelector('#exportNote');
+    this.exportTransparent = this.root.querySelector('#exportTransparent');
+
+    const refresh = () => this.refreshExportPanel();
+    this.exportFormat.addEventListener('change', refresh);
+    this.exportLongSide.addEventListener('change', refresh);
+    this.exportCustom.addEventListener('input', refresh);
+    this.root.querySelector('#exportRun').addEventListener('click', (event) => this.runExport(event.currentTarget));
+
+    // Les deux boutons hérités de la version 1 lancent l'export courant.
+    this.root.querySelector('#exportTop').addEventListener('click', () => this.root.querySelector('#exportRun').click());
+    this.root.querySelector('#exportMobile').addEventListener('click', () => this.root.querySelector('#exportRun').click());
+    refresh();
+  }
+
+  chosenLongSide() {
+    return this.exportLongSide.value === 'custom' ? Number(this.exportCustom.value) : Number(this.exportLongSide.value);
+  }
+
+  refreshExportPanel() {
+    const format = this.exportFormat.value;
+    const image = format === 'png' || format === 'jpeg';
+    this.root.querySelector('#exportSizeControl').hidden = !image;
+    this.root.querySelector('#exportCustomControl').hidden = !image || this.exportLongSide.value !== 'custom';
+    // La transparence n'a de sens qu'en PNG, et seulement autour d'un disque.
+    this.root.querySelector('#exportTransparentControl').hidden = !(format === 'png' && this.project.canvasShape === 'circle');
+    this.root.querySelector('#exportCustomValue').value = `${this.exportCustom.value} px`;
+
+    if (image) {
+      const out = outputSizeFor(this.project, this.chosenLongSide());
+      const megapixels = (out.width * out.height) / 1e6;
+      this.exportNote.textContent = out.clamped
+        ? `${out.width} × ${out.height} px — définition ramenée sous le plafond mémoire (${megapixels.toFixed(1)} Mpx).`
+        : `${out.width} × ${out.height} px (${megapixels.toFixed(1)} Mpx), au rapport du panneau.`;
+      this.exportNote.classList.toggle('warn', out.clamped);
+    } else {
+      const triangles = this.hm ? Math.min(EXPORT_MAX_TRIANGLES, (this.hm.cols - 1) * (this.hm.rows - 1) * 2) : 0;
+      const millions = triangles / 1000;
+      this.exportNote.textContent =
+        format === 'usdz'
+          ? `Modèle en mètres, ${Math.round(millions)} k triangles, environ ${(triangles * 0.0000235).toFixed(1)} Mo. S'ouvre directement dans Procreate.`
+          : `Deux fichiers de même racine : ${fileBaseFor(this.project)}.obj et ${fileBaseFor(this.project)}.mtl. Gardez-les côte à côte, l'OBJ pointe sur le MTL.`;
+      this.exportNote.classList.remove('warn');
+    }
+  }
+
+  /** Déclenche le téléchargement d'un blob. */
+  download(blob, name) {
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1500);
+  }
+
+  async runExport(button) {
+    if (!this.hm) return;
+    const format = this.exportFormat.value;
+    const original = button.textContent;
     button.disabled = true;
-    button.innerHTML = '<span class="btn-icon">···</span> Calcul HD';
+    button.textContent = 'Calcul…';
     this.rendering.classList.add('show');
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 40));
 
     try {
-      const aspect = aspectOf(this.project);
-      const long = 2048;
-      const outW = aspect >= 1 ? long : Math.max(1, Math.round(long * aspect));
-      const outH = aspect >= 1 ? Math.max(1, Math.round(long / aspect)) : long;
-      const target = document.createElement('canvas');
-      renderFull(target, this.project, this.hm, outW, outH, createRenderCache());
-      const blob = await new Promise((resolve) => target.toBlob(resolve, 'image/png'));
-      if (blob) {
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `relief-organique-${this.project.geometry.seed}.png`;
-        link.click();
-        setTimeout(() => URL.revokeObjectURL(link.href), 1200);
+      if (format === 'png' || format === 'jpeg') {
+        const { canvas, width, height } = renderForExport(this.project, this.hm, {
+          longSide: this.chosenLongSide(),
+          format,
+          transparent: this.exportTransparent.checked,
+        });
+        const blob = await encode(canvas, format);
+        if (blob) this.download(blob, fileNameFor(this.project, format, width, height));
+      } else if (format === 'usdz') {
+        const { data } = await exportUsdz(this.project, this.hm);
+        this.download(new Blob([data], { type: 'model/vnd.usdz+zip' }), `${fileBaseFor(this.project)}.usdz`);
+      } else {
+        const { objText, mtlText, baseName } = exportObj(this.project, this.hm);
+        this.download(new Blob([objText], { type: 'model/obj' }), `${baseName}.obj`);
+        // Le MTL suit, légèrement décalé : deux téléchargements simultanés sont
+        // parfois fusionnés en un seul par le navigateur.
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        this.download(new Blob([mtlText], { type: 'model/mtl' }), `${baseName}.mtl`);
       }
+    } catch (error) {
+      this.exportNote.textContent = `Export impossible : ${error.message}`;
+      this.exportNote.classList.add('warn');
     } finally {
       button.disabled = false;
-      button.innerHTML = original;
+      button.textContent = original;
       this.rendering.classList.remove('show');
     }
   }

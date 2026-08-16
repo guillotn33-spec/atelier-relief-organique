@@ -278,6 +278,9 @@ canvas { display: block; width: 100%; height: 100%; }
 }
 .mini-palette .tool-slider input[type="range"] { width: 78px; }
 
+.export-note { margin: 0; min-height: 32px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.export-note.warn { color: #e2c05f; }
+
 .variation-actions { display: grid; gap: 7px; padding: 15px; border-bottom: 1px solid var(--line); }
 .variation-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .variation-actions .btn { width: 100%; padding: 0 10px; font-size: 12px; }
