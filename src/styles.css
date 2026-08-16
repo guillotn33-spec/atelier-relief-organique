@@ -87,6 +87,10 @@ details[open] summary::after { content: "−"; }
 
 .control-list { padding: 1px 18px 18px; display: grid; gap: 15px; }
 .control { display: grid; gap: 7px; }
+/* Commande sans effet dans la famille procédurale courante. Elle reste LISIBLE
+   — on doit pouvoir constater sa valeur — mais s'annonce inactive. */
+.control-inert { opacity: .42; }
+.control-inert input[type="range"] { cursor: not-allowed; }
 .control-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; color: #dedbd4; font-size: 12px; }
 .control-value { color: var(--accent); font-variant-numeric: tabular-nums; }
 
@@ -399,6 +403,9 @@ canvas { display: block; width: 100%; height: 100%; }
 .dim-input-row { display: grid; grid-template-columns: 1fr auto; align-items: center; min-height: 48px; border: 1px solid var(--line); border-radius: 12px; background: #171715; overflow: hidden; }
 .dim-input-row input { width: 100%; min-height: 46px; padding: 0 12px; border: 0; background: transparent; color: var(--ink); font-variant-numeric: tabular-nums; }
 .dim-input-row input:focus { outline: none; }
+/* ...mais la boîte, elle, doit le montrer : sans cela, plus rien n'indiquait où
+   se trouvait le clavier dans les deux champs de dimensions. */
+.dim-input-row:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 .dim-unit { padding: 0 12px; color: var(--muted); font-size: 12px; }
 .dim-field.invalid .dim-input-row { border-color: #e2705f; }
 .dim-error { min-height: 15px; color: #e2705f; font-size: 11px; }
@@ -448,7 +455,12 @@ canvas { display: block; width: 100%; height: 100%; }
   .app { padding: 13px; }
   .topbar { align-items: flex-start; }
   .top-actions .btn:first-child { display: none; }
-  .btn-primary .btn-label { display: none; }
+  /* Même raison : c'est le bouton d'export, la sortie principale du produit.
+     Masqué par `display: none`, il n'avait plus aucun nom. */
+  .btn-primary .btn-label {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
   .stage { min-height: 350px; padding: 35px 17px; }
   .stage-footer { align-items: flex-start; flex-direction: column; gap: 5px; }
   .mobile-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 15px; border-bottom: 1px solid var(--line); }
@@ -489,7 +501,10 @@ canvas { display: block; width: 100%; height: 100%; }
   --lime-soft: rgba(202, 255, 84, .11);
   --text: #f1efe8;
   --text-2: #b8b5ad;
-  --text-3: #7e7d76;
+  /* Mesuré à 3,92:1 sur l'onglet actif et 4,14:1 sur le fond des outils, sous
+     le seuil de 4,5:1 — à 8 px, donc jamais du « grand texte ». Éclairci
+     jusqu'à passer sur les quatre fonds de panneau. */
+  --text-3: #9a9890;
 }
 
 .sr-only {
@@ -859,7 +874,7 @@ body { background: var(--app-bg); }
   transform: translate(-50%, -100%) rotate(var(--knob-angle));
 }
 
-.advanced-label { min-height: 29px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; border-bottom: 1px solid var(--hairline); color: var(--text-3); font-size: 8px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.advanced-label { width: 100%; background: none; border: 0; border-radius: 0; cursor: pointer; text-align: left; font-family: inherit; min-height: 29px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; border-bottom: 1px solid var(--hairline); color: var(--text-3); font-size: 8px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 #atelier .inspector-section { border-bottom: 1px solid var(--hairline); }
 #atelier .inspector-section summary { min-height: 36px; padding: 0 12px; color: var(--text-2); font-size: 10px; font-weight: 600; }
 #atelier .inspector-section summary::after { font-size: 13px; }
@@ -902,7 +917,8 @@ body { background: var(--app-bg); }
 .bottom-content { min-height: 0; overflow: auto; }
 .bottom-view { height: 100%; }
 
-.layers-table { display: grid; min-width: 570px; }
+.layer-workbench { height: 100%; min-width: 650px; display: grid; grid-template-columns: minmax(355px, 47%) minmax(295px, 1fr); }
+.layers-table { display: grid; align-content: start; min-width: 355px; border-right: 1px solid var(--hairline); }
 .layer-header, .layer-row { display: grid; grid-template-columns: 34px minmax(220px, 1fr) 150px 75px; align-items: center; text-align: left; }
 .layer-header { min-height: 23px; border-bottom: 1px solid var(--hairline); color: var(--text-3); font-size: 7px; letter-spacing: .08em; text-transform: uppercase; }
 .layer-row { min-height: 39px; padding: 0; border: 0; border-bottom: 1px solid rgba(255,255,255,.045); background: transparent; color: var(--text-3); font-size: 8px; cursor: pointer; }
@@ -917,6 +933,24 @@ body { background: var(--app-bg); }
 .material-swatch { background: linear-gradient(135deg, #e8e3d9, #a6a198); }
 .light-swatch { background: radial-gradient(circle, #f2dfa7 0 8%, #4b463a 35%, #1c1d1a 66%); }
 .layer-state { color: var(--lime); }
+
+.parameter-row { min-height: 23px; display: grid; grid-template-columns: 34px minmax(0, 1fr) 64px; align-items: center; padding: 0; border: 0; border-bottom: 1px solid rgba(255,255,255,.035); background: #181916; color: var(--text-3); font: inherit; font-size: 8px; text-align: left; cursor: pointer; }
+.parameter-row:hover { background: rgba(202,255,84,.035); color: var(--text-2); }
+.parameter-row > span:first-child { text-align: center; color: #777a72; }
+.linked-value { padding-right: 10px; color: var(--lime); text-align: right; font-variant-numeric: tabular-nums; }
+.value-tracks { position: relative; display: grid; grid-template-rows: 23px 39px repeat(3, 23px) repeat(2, 39px); overflow: hidden; background: repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), rgba(255,255,255,.035) calc(25% - 1px) 25%); }
+.track-ruler { display: grid; grid-template-columns: 1fr repeat(5, 32px); align-items: center; padding: 0 8px; border-bottom: 1px solid var(--hairline); color: #656860; font-size: 7px; }
+.track-ruler > span:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.track-ruler > span:first-child { color: var(--text-3); letter-spacing: .08em; text-transform: uppercase; }
+.track-spacer { border-bottom: 1px solid rgba(255,255,255,.045); }
+.value-track { position: relative; min-width: 0; padding: 0 12px; border: 0; border-bottom: 1px solid rgba(255,255,255,.035); background: transparent; cursor: pointer; }
+.value-track:hover { background: rgba(255,255,255,.02); }
+.track-line { position: relative; height: 2px; display: block; background: rgba(255,255,255,.08); }
+.track-progress { position: absolute; inset: 0 auto 0 0; width: 0; background: rgba(202,255,84,.48); }
+.track-node { position: absolute; top: 50%; left: 0; width: 7px; height: 7px; border: 1px solid #d9ff78; background: var(--lime); box-shadow: 0 0 0 3px rgba(202,255,84,.08); transform: translate(-50%, -50%) rotate(45deg); }
+.track-band { display: flex; align-items: center; margin: 7px 10px; padding: 0 9px; border-radius: 2px; color: #d4d7cf; font-size: 7px; }
+.material-band { background: linear-gradient(90deg, rgba(198,191,177,.42), rgba(225,218,204,.22)); }
+.light-band { background: linear-gradient(90deg, rgba(234,196,108,.28), rgba(202,255,84,.18)); }
 
 .variation-strip { height: 100%; display: flex; align-items: center; gap: 8px; padding: 10px 12px; overflow-x: auto; }
 .variation-card { min-width: 154px; height: 66px; display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 8px; padding: 5px; border: 1px solid var(--hairline); border-radius: 6px; background: #151614; color: var(--text-2); text-align: left; cursor: pointer; }
@@ -959,10 +993,262 @@ body { background: var(--app-bg); }
   #atelier .bottom-panel { grid-column: 1; grid-row: 2; }
   #atelier .stage { padding: 22px 16px; }
   #atelier .toolbar .tool { min-width: 38px; padding: 3px 5px; }
-  #atelier .toolbar .tool span:last-child:not(.sr-only) { display: none; }
+  /* `display: none` retirait le libellé du NOM ACCESSIBLE : sous 700 px, les
+     six outils devenaient six boutons muets, leur icône étant `aria-hidden`.
+     La mise hors du flux visuel garde le texte pour le lecteur d'écran. */
+  #atelier .toolbar .tool span:last-child:not(.sr-only) {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
   #atelier .brush-options { margin-left: auto; }
   #atelier .toolbar .tool-slider input[type="range"] { width: 52px; }
   #atelier .stage-footer .hint { display: none; }
   .document-status > span:not(.status-dot):not(#sizeLabel) { display: none; }
   .layer-header, .layer-row { grid-template-columns: 30px minmax(190px, 1fr) 110px 60px; }
 }
+
+/* Le chevron du dépliant tourne avec son état. */
+.advanced-label .advanced-chevron { transition: transform .18s ease; }
+.advanced-label[aria-expanded="true"] .advanced-chevron { transform: rotate(180deg); }
+.advanced-label:hover { color: var(--text-2); }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Barre de menus
+   Chaque entrée délègue à une commande existante ; le style ne fait que la
+   présenter. `position: relative` sur `.menu` suffit à ancrer le déroulant :
+   pas de calcul de position en JavaScript, donc rien à resynchroniser.
+   ───────────────────────────────────────────────────────────────────────── */
+.menu-bar { display: flex; align-items: center; gap: 2px; }
+.menu { position: relative; }
+.menu-title {
+  padding: 5px 10px; border: 0; border-radius: 7px; background: none; cursor: pointer;
+  color: var(--text-2); font: inherit; font-size: 12px; white-space: nowrap;
+}
+.menu-title:hover, .menu.open .menu-title { background: rgba(255, 255, 255, .07); color: var(--ink); }
+.menu-list {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 60; min-width: 244px;
+  display: flex; flex-direction: column; padding: 5px; border-radius: 12px;
+  border: 1px solid var(--line); background: #1c1d1a;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .55);
+}
+.menu-list[hidden] { display: none; }
+.menu-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 22px;
+  padding: 7px 10px; border: 0; border-radius: 7px; background: none; cursor: pointer;
+  color: var(--ink); font: inherit; font-size: 12px; text-align: left; white-space: nowrap;
+}
+.menu-item:hover:not(:disabled), .menu-item:focus-visible { background: rgba(217, 255, 116, .13); }
+.menu-item:disabled { color: var(--text-3); cursor: default; }
+.menu-item kbd {
+  padding: 1px 5px; border-radius: 4px; background: rgba(255, 255, 255, .07);
+  color: var(--text-3); font-family: inherit; font-size: 10px;
+}
+.menu-sep { margin: 4px 6px; border: 0; border-top: 1px solid var(--hairline); }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Aide contextuelle
+   ───────────────────────────────────────────────────────────────────────── */
+.library-help { display: flex; align-items: flex-start; gap: 9px; }
+.help-copy { min-width: 0; }
+.help-copy strong { display: block; margin-bottom: 2px; color: var(--ink); font-size: 11px; }
+.help-copy p { margin: 0; color: var(--text-2); font-size: 11px; line-height: 1.45; }
+.help-shortcut {
+  flex: 0 0 auto; padding: 2px 6px; border-radius: 5px; background: rgba(255, 255, 255, .07);
+  color: var(--text-3); font-family: inherit; font-size: 10px;
+}
+.help-shortcut[hidden] { display: none; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Disque de couleurs
+   ───────────────────────────────────────────────────────────────────────── */
+.color-field { display: flex; flex-direction: column; gap: 8px; }
+.color-disc { display: flex; align-items: center; gap: 12px; padding: 4px 0 2px; }
+.color-disc-plate { position: relative; flex: 0 0 auto; line-height: 0; }
+.color-disc-canvas { border-radius: 50%; cursor: crosshair; touch-action: none; }
+.color-disc-canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.color-disc-cursor {
+  position: absolute; width: 13px; height: 13px; border-radius: 50%;
+  border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .6);
+  transform: translate(-50%, -50%); pointer-events: none;
+}
+.color-disc-light { flex: 1 1 auto; min-width: 0; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Pointeur de brosse
+   L'empreinte ne doit JAMAIS intercepter le geste : elle est posée au-dessus
+   de l'œuvre et laisse tout passer.
+   ───────────────────────────────────────────────────────────────────────── */
+.brush-cursor { position: absolute; inset: 0; z-index: 4; pointer-events: none; opacity: 0; transition: opacity .12s ease; }
+.brush-cursor.show { opacity: 1; }
+.brush-cursor-shape {
+  position: absolute; left: 0; top: 0; border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, .92);
+  box-shadow: 0 0 0 1.5px rgba(0, 0, 0, .45), inset 0 0 0 1.5px rgba(0, 0, 0, .25);
+}
+/* Les empreintes miroir sont plus discrètes : la main n'est pas là. */
+.brush-cursor-shape.mirror { border-style: dashed; border-color: rgba(255, 255, 255, .6); }
+
+/* Sélecteur compact dans la barre d'outils (symétrie). */
+.tool-select { justify-content: center; }
+.select-compact { height: 26px; padding: 0 6px; font-size: 11px; }
+
+/* ========================================================================== */
+/* Lot 9 — projet + boutique d’effets                                         */
+/* ========================================================================== */
+
+#atelier .library-panel {
+  grid-template-rows: 220px minmax(0, 1fr) auto auto;
+}
+
+.project-pane,
+.effects-pane {
+  min-height: 0;
+  display: grid;
+  overflow: hidden;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.project-pane { grid-template-rows: 34px minmax(0, 1fr); }
+.effects-pane { grid-template-rows: 34px 35px minmax(0, 1fr); }
+
+.compact-titlebar { min-height: 34px; padding: 0 9px; }
+.compact-titlebar h2 { margin: 0; color: var(--text-2); font-size: 10px; font-weight: 600; }
+.panel-menu { width: 25px; height: 25px; padding: 0; border: 0; background: transparent; color: var(--text-3); font-size: 10px; cursor: pointer; }
+.panel-menu:hover { color: var(--text); }
+
+.project-stack { min-height: 0; display: grid; align-content: start; padding: 8px; overflow: auto; }
+.project-document,
+.project-resource {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  padding: 5px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-2);
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-document { grid-template-columns: 66px 1fr; min-height: 52px; }
+.project-resource { grid-template-columns: 28px 1fr; min-height: 34px; }
+.project-document:hover,
+.project-resource:hover { background: rgba(255,255,255,.03); }
+.project-document.active { border-color: rgba(202,255,84,.23); background: rgba(202,255,84,.045); }
+.project-document > span:last-child,
+.project-resource > span:last-child { min-width: 0; display: grid; gap: 1px; }
+.project-document strong,
+.project-resource strong { overflow: hidden; color: var(--text-2); font-size: 9px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.project-document small,
+.project-resource small { color: var(--text-3); font-size: 7px; }
+
+.project-thumb { width: 66px; height: 40px; display: block; border: 1px solid var(--hairline-strong); border-radius: 3px; }
+.resource-orb { width: 24px; height: 24px; display: block; border: 1px solid rgba(255,255,255,.16); border-radius: 50%; box-shadow: inset -4px -5px 8px rgba(0,0,0,.18); }
+.resource-orb.mineral { border-radius: 5px; }
+.limestone { background: radial-gradient(circle at 35% 28%, #faf2df, #c8bda9 57%, #8e8475); }
+.mineral { background: linear-gradient(145deg, #a5a5a2, #555753); }
+.warm-light { background: radial-gradient(circle at 43% 42%, #fff7c9 0 9%, #f2b93f 25%, #534019 58%, #181816 76%); box-shadow: 0 0 8px rgba(242,185,63,.32); }
+.porcelain { background: linear-gradient(145deg, #ffffff, #cfd5d5); }
+.sandstone { background: linear-gradient(145deg, #d9c29b, #8e7250); }
+.terracotta { background: linear-gradient(145deg, #c87954, #63372d); }
+.graphite { background: linear-gradient(145deg, #777974, #1f211f); }
+.metal { background: linear-gradient(135deg, #f0f1ee 0 18%, #656965 42%, #d8dad7 64%, #555954); }
+
+.effect-search {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  align-items: center;
+  margin: 5px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: #131411;
+  color: var(--text-3);
+}
+.effect-search > span { text-align: center; font-size: 12px; }
+.effect-search input { width: 100%; height: 24px; padding: 0 5px 0 0; border: 0; outline: 0; background: transparent; color: var(--text-2); font-size: 8px; }
+.effect-search:focus-within { border-color: rgba(202,255,84,.38); }
+
+.effects-scroll { overflow: auto; }
+#atelier .effect-category { border-bottom: 1px solid rgba(255,255,255,.055); }
+#atelier .effect-category > summary { min-height: 29px; padding: 0 8px; color: var(--text-2); font-size: 8px; font-weight: 600; }
+#atelier .effect-category > summary::after { order: -1; margin-right: 5px; content: "›"; font-size: 10px; transform: rotate(0); }
+#atelier .effect-category[open] > summary::after { content: "›"; transform: rotate(90deg); }
+.category-count { margin-left: auto; color: var(--text-3); font-size: 7px; font-variant-numeric: tabular-nums; }
+
+#atelier .prototype-category .preset-grid { gap: 4px; padding: 0 6px 7px; }
+#atelier .prototype-category .preset-card { position: relative; min-height: 52px; grid-template-columns: 88px minmax(0,1fr); padding: 3px; }
+#atelier .prototype-category .preset-art { height: 53px; }
+
+/* Vignette rendue par le moteur : elle remplace le dessin CSS du prototype et
+   le glyphe de l'effet. Fond sombre tant que le rendu n'est pas arrivé, pour
+   qu'une case vide ne clignote pas en clair. */
+.preset-art-render, .effect-thumb { display: block; border-radius: 2px; background: #161715; object-fit: cover; }
+.effect-thumb { width: 46px; height: 29px; border: 1px solid rgba(255,255,255,.09); }
+
+.effect-list { display: grid; padding: 0 4px 5px; }
+.effect-item {
+  min-width: 0;
+  min-height: 34px;
+  display: grid;
+  grid-template-columns: 46px minmax(0,1fr) 10px;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 5px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-3);
+  text-align: left;
+  cursor: pointer;
+}
+.effect-item:hover { background: rgba(255,255,255,.035); color: var(--text-2); }
+.effect-item.active { background: rgba(202,255,84,.085); color: var(--lime); }
+.effect-item > span:nth-child(2) { min-width: 0; overflow: hidden; font-size: 8px; }
+.effect-item > span:last-child { text-align: right; }
+
+/* Nom et description. La description existait depuis le lot 9 dans la table des
+   effets ; l'interface la jetait. Une ligne de plus par article transforme une
+   liste de noms en catalogue. */
+.effect-copy { display: grid; gap: 1px; }
+.effect-copy strong { overflow: hidden; font-weight: 600; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.effect-copy small { overflow: hidden; color: var(--text-3); font-size: 7px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.effect-item.active .effect-copy small { color: rgba(202,255,84,.62); }
+.effect-glyph { color: #888b83; text-align: center; font-size: 10px; }
+.effect-item.active .effect-glyph { color: var(--lime); }
+.effect-swatch { width: 12px; height: 12px; display: block; border: 1px solid rgba(255,255,255,.14); border-radius: 50%; }
+
+.effects-pane .library-help { margin-top: 5px; padding: 9px 8px; }
+.effects-pane .help-copy strong { font-size: 8px; }
+.effects-pane .help-copy p { font-size: 7px; }
+
+.generation-strip { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; padding: 5px; border-top: 1px solid var(--hairline); background: #171816; }
+#atelier .generation-strip .btn { min-width: 0; padding: 0 4px; overflow: hidden; font-size: 7px; white-space: nowrap; }
+
+@media (max-width: 1180px) {
+  #atelier .library-panel { grid-template-rows: 198px minmax(0, 1fr) auto auto; }
+  .project-document { grid-template-columns: 54px 1fr; }
+  .project-thumb { width: 54px; }
+}
+
+.active-effect-bar {
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: 24px minmax(0,1fr) 26px 30px;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-bottom: 1px solid var(--hairline);
+  background: #1a1b18;
+}
+.active-effect-fx { color: var(--lime); font-size: 11px; font-style: italic; }
+.active-effect-bar > span:nth-child(2) { min-width: 0; display: grid; gap: 1px; }
+.active-effect-bar strong { overflow: hidden; color: var(--text-2); font-size: 9px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.active-effect-bar small { color: var(--text-3); font-size: 7px; }
+.effect-randomize { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--text-3); cursor: pointer; }
+.effect-randomize:hover { background: rgba(255,255,255,.05); color: var(--lime); }
+.effect-enabled { width: 28px; height: 16px; display: block; padding: 2px; border-radius: 9px; background: rgba(202,255,84,.36); }
+.effect-enabled span { width: 12px; height: 12px; display: block; margin-left: auto; border-radius: 50%; background: var(--lime); box-shadow: 0 0 5px rgba(202,255,84,.4); }

@@ -52,6 +52,122 @@ function smoothstep01(t) {
   return t * t * (3 - 2 * t);
 }
 
+/** Hash déterministe local, dans [0, 1]. */
+function hash01(ix, iy, seed) {
+  let h = Math.imul(ix | 0, 374761393) ^ Math.imul(iy | 0, 668265263) ^ Math.imul(seed | 0, 1274126177);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+}
+
+/**
+ * Union douce de cavités circulaires irrégulières.
+ *
+ * Chaque case du réseau possède un centre décalé et un rayon déterministes.
+ * On retourne le meilleur champ signé `rayon - distance` : positif dans une
+ * cellule, négatif sur les plateaux. Contrairement à un bruit de valeur, le
+ * fond ne peut pas contenir d’îlot central — la profondeur croît toujours en
+ * allant vers le centre de la cavité.
+ */
+function cellularSignal(x, y, seed, density, irregularity, fusion = 0) {
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  let best = -Infinity;
+  const jitter = 0.30 + irregularity * 0.62;
+  const baseRadius = 0.24 + density * 0.33;
+
+  for (let gy = iy - 1; gy <= iy + 1; gy++) {
+    for (let gx = ix - 1; gx <= ix + 1; gx++) {
+      const ox = 0.5 + (hash01(gx, gy, seed + 17) - 0.5) * jitter;
+      const oy = 0.5 + (hash01(gx, gy, seed + 71) - 0.5) * jitter;
+      const radius = baseRadius * (0.72 + hash01(gx, gy, seed + 131) * 0.55);
+      // `Math.sqrt` et non `Math.hypot` : ce dernier fait une mise à l'échelle
+      // anti-débordement inutile ici — 3,6 fois plus lent pour un écart de
+      // 4 × 10⁻¹⁶, mesuré. Cette ligne s'exécute neuf fois par cellule de
+      // grille, soit plus de deux millions de fois par reconstruction.
+      const dxc = x - (gx + ox);
+      const dyc = y - (gy + oy);
+      const d = radius - Math.sqrt(dxc * dxc + dyc * dyc);
+      // UNION DOUCE, et non `Math.max`.
+      //
+      // Le maximum dur laisse une ARÊTE là où deux cavités se rejoignent : la
+      // paroi se pince en pointe, et le relief prend un air de feuillage. Les
+      // trois photos de référence ne montrent jamais cela — leurs cavités
+      // fusionnent en une seule cuvette continue, sans pli.
+      //
+      // `smax` arrondit exactement cette jonction, et c'est `fuse` qui règle le
+      // rayon de l'arrondi : la molette « fusion des formes », inerte dans cette
+      // famille jusqu'ici, y a désormais son sens le plus littéral.
+      best = best === -Infinity ? d : (fusion > 0 ? smax(best, d, fusion) : Math.max(best, d));
+    }
+  }
+  return best;
+}
+
+/**
+ * Quelques bassins elliptiques, espacés et orientés indépendamment.
+ * Cette primitive est réservée à Archipel : un Voronoï complet produirait une
+ * seconde famille « Cellules » alors que l'intention est un paysage ouvert,
+ * ponctué seulement de deux ou trois lagunes à l'échelle d'un panneau.
+ */
+function sparseEllipticSignal(x, y, seed, density, irregularity) {
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  let best = -Infinity;
+  const keep = 0.18 + density * 0.24;
+
+  // BALAYAGE 3 × 3, ET NON 5 × 5.
+  //
+  // Un centre reste dans [0,07 ; 0,93] de sa case et l'ellipse porte au plus à
+  // 0,55. Une case à deux rangs est donc à 1,07 au minimum : sa contribution
+  // vaut au mieux 1 − 1,07/0,55 ≈ −0,95, très en deçà de la largeur de rampe
+  // (0,10 à 0,17), donc rigoureusement nulle après `shoulderRamp`. Les seize
+  // cases extérieures ne coûtaient que du temps — seize hachages par cellule.
+  for (let gy = iy - 1; gy <= iy + 1; gy++) {
+    for (let gx = ix - 1; gx <= ix + 1; gx++) {
+      if (hash01(gx, gy, seed + 11) > keep) continue;
+      const ox = 0.5 + (hash01(gx, gy, seed + 37) - 0.5) * (0.46 + irregularity * 0.40);
+      const oy = 0.5 + (hash01(gx, gy, seed + 73) - 0.5) * (0.46 + irregularity * 0.40);
+      const angle = hash01(gx, gy, seed + 109) * Math.PI;
+      const ca = Math.cos(angle);
+      const sa = Math.sin(angle);
+      const dx = x - (gx + ox);
+      const dy = y - (gy + oy);
+      const rx = dx * ca + dy * sa;
+      const ry = -dx * sa + dy * ca;
+      const radiusX = 0.28 + hash01(gx, gy, seed + 151) * 0.27;
+      const radiusY = radiusX * (0.60 + hash01(gx, gy, seed + 197) * 0.30);
+      const nx = rx / radiusX;
+      const ny = ry / radiusY;
+      best = Math.max(best, 1 - Math.sqrt(nx * nx + ny * ny));
+    }
+  }
+  return best;
+}
+
+/**
+ * Réseau de chenaux — RÉSERVÉ À LA FAMILLE `organic`.
+ *
+ * Constat de l'audit : sur Cellules et Archipel, la molette « Chenaux » ne
+ * change RIEN. Douze combinaisons de (chenaux, fusion) sur Archipel rendent la
+ * même distance à ref-3 — 4,46 % — à trois décimales, et le même compte
+ * d'îlots. Une commande offerte à l'utilisateur ne pilotait aucune sortie sur
+ * deux préréglages sur trois.
+ *
+ * L'ÉTENDRE AUX AUTRES FAMILLES A ÉTÉ ESSAYÉ, MESURÉ, ET REJETÉ. Fusionner ce
+ * réseau — un fbm, donc un champ à minima intérieurs — avec les silhouettes de
+ * Cellules et d'Archipel fait passer les variations portant une bosse enclavée
+ * de 2 % à 48 % sur 200 × 120 cm. Le bruit apporte ses propres cuvettes au fond
+ * des cavités ; `cellularSignal` est justement construit pour n'en avoir aucune.
+ *
+ * La molette est donc DÉSACTIVÉE hors de `organic` plutôt que faussement
+ * branchée : voir `syncFamilyControls` dans l'atelier. Une commande visible qui
+ * n'agit pas est un mensonge ; une commande grisée qui dit pourquoi est un fait.
+ */
+function channelCarve(ctx, bx, by, bias, rim) {
+  const n = fbm(bx * ctx.invChannel, by * ctx.invChannel, ctx.seed + 2, ctx.octavesChannel);
+  return ctx.carveGain * shoulderRamp(n + bias + rim - ctx.thresholdChannel, ctx.shoulderChannel) * ctx.channelWeight;
+}
+
 // Écart-type mesuré du fbm employé ici (80 000 tirages) : 0,300, moyenne nulle,
 // extrêmes à ±0,9. Les seuils sont exprimés en multiples de cet écart-type, ce
 // qui rend « densité » lisible : à 0,5 le seuil vaut la médiane du bruit, donc
@@ -88,6 +204,7 @@ export function makeFieldContext(geometry) {
 
   return {
     geometry: g,
+    family: g.family || 'organic',
     negative: !!g.negative,
     cosA: Math.cos(orientation),
     sinA: Math.sin(orientation),
@@ -146,7 +263,13 @@ export function makeFieldContext(geometry) {
     shoulderChannel: NOISE_STD * (0.12 + g.shoulder * 0.55) * 0.6,
     channelWeight: g.channelWeight,
     fuseK: 0.08 + g.fuse * 0.42,
+    // Rayon d'arrondi de la jonction entre deux cavités voisines, exprimé en
+    // fraction d'une case du réseau — l'unité dans laquelle `cellularSignal`
+    // travaille. À 0,26 (fusion au maximum), deux cavités qui se touchent ne
+    // laissent plus de pli du tout ; à 0, on retrouve l'arête du maximum dur.
+    cellFusion: g.fuse * 0.26,
     depth: g.depth,
+    basinScaleCm: basin,
 
     seed: g.seed | 0,
   };
@@ -194,18 +317,61 @@ export function evalParts(ctx, xCm, yCm, warpXCm = 0, warpYCm = 0, liftValue = 0
   const carrier = fbm(sx + ctx.carrierPhase, sy, ctx.seed + 523, 2);
   const bias = ctx.carrierBias * carrier;
 
-  // 4. Creusement — découpe du bord au SEUIL, profondeur pilotée par un champ
-  //    délibérément pauvre en octaves (voir `octavesBasin`).
+  // 4. Creusement. Les trois familles partagent repère, déformation, houle,
+  //    profil monotone et sculpture, mais pas le champ qui dessine leurs
+  //    silhouettes : changer seulement les paramètres d’un même bruit faisait
+  //    converger Dunes, Cellules et Archipel vers le même langage visuel.
   const rim = ctx.rimJitter > 0 ? ctx.rimJitter * fbm(bx * ctx.invRim, by * ctx.invRim, ctx.seed + 3, 2) : 0;
-  const nBasin = fbm(bx * ctx.invBasin, by * ctx.invBasin, ctx.seed + 1, ctx.octavesBasin);
-  const carveBasin = ctx.carveGain * shoulderRamp(nBasin + bias + rim - ctx.thresholdBasin, ctx.shoulderBasin);
+  let carve;
 
-  let carve = carveBasin;
-  if (ctx.channelWeight > 0) {
-    const nChannel = fbm(bx * ctx.invChannel, by * ctx.invChannel, ctx.seed + 2, ctx.octavesChannel);
-    const carveChannel = ctx.carveGain * shoulderRamp(nChannel + bias + rim - ctx.thresholdChannel, ctx.shoulderChannel) * ctx.channelWeight;
-    // 5. Fusion : le plus profond l'emporte, sans arête au raccord.
-    carve = smax(carveBasin, carveChannel, ctx.fuseK);
+  if (ctx.family === 'dunes') {
+    // Strates continues : une phase périodique serpente sous deux bruits très
+    // larges. Les lignes restent longues et lisibles ; le second terme varie
+    // leur largeur sans les casser en taches indépendantes.
+    const large = fbm(ax / (ctx.basinScaleCm * 1.55), ay / (ctx.basinScaleCm * 1.25), ctx.seed + 811, 2);
+    const cross = fbm(ax / (ctx.basinScaleCm * 0.72), ay / (ctx.basinScaleCm * 1.8), ctx.seed + 907, 2);
+    const wavelength = ctx.basinScaleCm * (0.92 + (1 - ctx.geometry.density) * 0.54);
+    const phase = (by / wavelength) * Math.PI * 2 + large * (1.7 + ctx.geometry.warpAmount * 2.4) + cross * 0.62;
+    const bands = Math.cos(phase) * 0.50 + large * 0.23 + cross * 0.09 + bias * 0.42 + rim * 0.28;
+    const threshold = 0.25 - ctx.geometry.density * 0.42;
+    carve = ctx.carveGain * 0.55 * shoulderRamp(bands - threshold, ctx.shoulderBasin * 1.30);
+  } else if (ctx.family === 'cells') {
+    const signal = cellularSignal(
+      bx / ctx.basinScaleCm,
+      by / ctx.basinScaleCm,
+      ctx.seed + 1201,
+      ctx.geometry.density,
+      ctx.geometry.irregularity,
+      ctx.cellFusion
+    );
+    const width = 0.035 + ctx.geometry.shoulder * 0.12;
+    carve = ctx.carveGain * 0.52 * shoulderRamp(signal + bias * 0.08, width);
+  } else if (ctx.family === 'archipelago') {
+    // Grandes strates ouvertes + quelques bassins. Les deux composantes sont
+    // des champs de distance monotones ; leur union conserve des fonds propres
+    // là où deux formes se rejoignent.
+    const large = fbm(ax / (ctx.basinScaleCm * 1.25), ay / (ctx.basinScaleCm * 2.10), ctx.seed + 1433, 2);
+    const cross = fbm(ax / (ctx.basinScaleCm * 0.82), ay / (ctx.basinScaleCm * 2.65), ctx.seed + 1499, 2);
+    const phase = (by / (ctx.basinScaleCm * 1.82)) * Math.PI * 2 + large * (2.8 + ctx.geometry.warpAmount * 2.4) + cross * 0.72;
+    const bands = Math.cos(phase) * 0.49 + large * 0.28 + bias * 0.22;
+    const bandCarve = ctx.carveGain * 0.50 * shoulderRamp(bands - 0.14, ctx.shoulderBasin * 1.50);
+    const islands = sparseEllipticSignal(
+      bx / (ctx.basinScaleCm * 1.72),
+      by / (ctx.basinScaleCm * 1.72),
+      ctx.seed + 1601,
+      ctx.geometry.density,
+      ctx.geometry.irregularity
+    );
+    const islandCarve = ctx.carveGain * 0.56 * shoulderRamp(islands, 0.10 + ctx.geometry.shoulder * 0.07);
+    // `smax` et non `Math.max` : la jonction de deux formes est un point anguleux
+    // du creusement, donc un minimum local — exactement la bosse enclavée que le
+    // test A2 compte. L'union douce arrondit la jonction et la comble.
+    carve = smax(bandCarve, islandCarve, ctx.fuseK);
+  } else {
+    // Silhouette bruitée — la famille `organic`, seule à posséder des chenaux.
+    const nBasin = fbm(bx * ctx.invBasin, by * ctx.invBasin, ctx.seed + 1, ctx.octavesBasin);
+    carve = ctx.carveGain * shoulderRamp(nBasin + bias + rim - ctx.thresholdBasin, ctx.shoulderBasin);
+    if (ctx.channelWeight > 0) carve = smax(carve, channelCarve(ctx, bx, by, bias, rim), ctx.fuseK);
   }
 
   // La houle est le plateau. Elle s'ÉTEINT dès que le creusement dépasse
@@ -218,8 +384,14 @@ export function evalParts(ctx, xCm, yCm, warpXCm = 0, warpYCm = 0, liftValue = 0
   // donc dh/dcarve ≤ (0,16 × 5 − 1) × profondeur = −0,20 × profondeur < 0.
   const attenuation = 1 - smoothstep01(carve / CARRIER_CUTOFF);
 
+  // Dunes et Archipel tirent déjà leur grande modulation de leur champ de
+  // silhouettes. Leur réinjecter la houle comme HAUTEUR créait, sur certaines
+  // variations, une petite bosse isolée au fond d'une vallée. Le bruit reste
+  // utilisé en amont pour courber les formes, mais pas pour relever leur fond.
+  const carrierHeight = ctx.family === 'dunes' || ctx.family === 'archipelago' ? 0 : ctx.swellAmp * attenuation;
+
   return {
-    a: ctx.swellAmp * attenuation,
+    a: carrierHeight,
     b: -ctx.depth * carve + liftValue,
     sx,
     sy,

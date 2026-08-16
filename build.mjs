@@ -26,7 +26,14 @@ await mkdir(dist, { recursive: true });
 // la correction passait pour inopérante.
 // Le banc de mesure n'est servi qu'en développement : il ne doit pas être
 // déployé avec l'application.
-const staticFiles = serve ? ['index.html', 'bench.html'] : ['index.html'];
+// Les images de référence sont servies EN DÉVELOPPEMENT SEULEMENT. Elles
+// doivent partager l'origine de l'application pour qu'un canvas puisse les
+// relire — une image d'une autre origine teinte le canvas et `getImageData`
+// devient inaccessible. Elles ne partent jamais en production : ce sont des
+// documents de travail, pas des ressources du produit.
+const staticFiles = serve
+  ? ['index.html', 'bench.html', 'ref-1.jpg', 'ref-2.jpg', 'ref-3.jpg']
+  : ['index.html'];
 for (const file of staticFiles) {
   await copyFile(path.join(root, file), path.join(dist, file));
 }

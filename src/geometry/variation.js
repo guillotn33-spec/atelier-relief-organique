@@ -39,8 +39,23 @@ export function nextVariation(geometry) {
   // variations, l'allongement et l'irrégularité se retrouvaient bloqués à 1,00 et
   // 0,00 — le dessin dégénérait au lieu de dériver. La réflexion renvoie la
   // valeur vers l'intérieur et garde la suite vivante.
-  const within = (key, value) => {
-    const [lo, hi] = GEOMETRY_BOUNDS[key];
+  // L'INTERVALLE S'ÉLARGIT AU POINT DE DÉPART.
+  //
+  // `GEOMETRY_BOUNDS` décrit la plage que la variation explore d'elle-même ;
+  // l'interface, elle, laisse aller plus loin — la densité va de 5 à 95 % au
+  // curseur contre 18 à 72 % ici. Une valeur posée à la main hors de cet
+  // intervalle était RÉFLÉCHIE, donc renvoyée très loin de son point de départ.
+  // Mesuré : une densité réglée à 90 % retombait entre 50 et 57 % à la première
+  // variation, et 10 % remontait entre 22 et 29 %. Le réglage de l'utilisateur
+  // était effacé par un geste censé l'explorer.
+  //
+  // On borne donc par l'union de l'intervalle canonique et du point de départ.
+  // À l'intérieur, rien ne change ; au-delà, la variation secoue autour de la
+  // valeur voulue au lieu de la ramener de force.
+  const within = (key, value, origine) => {
+    const [borneBasse, borneHaute] = GEOMETRY_BOUNDS[key];
+    const lo = Math.min(borneBasse, origine);
+    const hi = Math.max(borneHaute, origine);
     const span = hi - lo;
     if (span <= 0) return lo;
     let v = value;
@@ -51,9 +66,9 @@ export function nextVariation(geometry) {
     return clamp(v, lo, hi);
   };
   // Décalage absolu, pour les paramètres normalisés.
-  const shift = (key, amount) => within(key, geometry[key] + signed() * amount);
+  const shift = (key, amount) => within(key, geometry[key] + signed() * amount, geometry[key]);
   // Décalage relatif, pour les longueurs.
-  const scale = (key, ratio) => within(key, geometry[key] * (1 + signed() * ratio));
+  const scale = (key, ratio) => within(key, geometry[key] * (1 + signed() * ratio), geometry[key]);
 
   // Le déplacement dans le champ est proportionnel à la taille des cavités :
   // il faut se déplacer d'environ une cavité pour changer la composition.

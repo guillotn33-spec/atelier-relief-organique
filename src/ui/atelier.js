@@ -8,9 +8,9 @@
 
 import { clamp } from '../core/math.js';
 import { BOUNDS, PRESETS, applyPreset, aspectOf, baseGeometryOf, captureBase, fitLockedSize } from '../core/project.js';
+import { EFFECTS, applyEffect } from '../core/effects.js';
 import { GestureManager, ROLE } from './gestures.js';
 import { Viewport } from './viewport.js';
-import { Dock } from './dock.js';
 import { nextVariation } from '../geometry/variation.js';
 import { buildHeightmap, updateHeightmapRect } from '../geometry/heightmap.js';
 import { createRenderCache, renderFull, renderPatch } from '../render2d/renderer.js';
@@ -21,11 +21,25 @@ import { SculptHistory } from '../sculpt/history.js';
 import { ProjectStore } from './persistence.js';
 import { BINDINGS, TOOL_META } from './bindings.js';
 import { ExportPanel } from './exportPanel.js';
+import { ContextHelp } from './contextHelp.js';
+import { MenuBar, RACCOURCIS } from './menuBar.js';
+import { ColorDisc } from './colorDisc.js';
+import { BrushCursor } from './brushCursor.js';
 import { ProWorkspace } from './proWorkspace.js';
+import { EffectPreviews } from './effectPreviews.js';
 
 // Miroir de `.art-wrap { width: min(100%, 1080px) }`. Nommé plutôt que recopié
 // nu : une valeur en pixels perdue dans un calcul se relit comme une marge.
 const ART_MAX_WIDTH_PX = 1080;
+
+// Miroirs appliqués à un coup de brosse selon la symétrie choisie. Le premier
+// est toujours l'identité : le geste réel part en premier, les copies suivent.
+const SYMETRIES = {
+  none: [[1, 1]],
+  x: [[1, 1], [-1, 1]],
+  y: [[1, 1], [1, -1]],
+  xy: [[1, 1], [-1, 1], [1, -1], [-1, -1]],
+};
 
 export class Atelier {
   constructor(root, { project, layer, onNewProject }) {
@@ -72,6 +86,7 @@ export class Atelier {
     this.brushElongation = root.querySelector('#brushElongation');
     this.brushAngle = root.querySelector('#brushAngle');
     this.brushFollow = root.querySelector('#brushFollow');
+    this.symmetry = root.querySelector('#symmetry');
     this.brushGhost = null;
     this.brushGhostTimer = 0;
     this.heightControl = root.querySelector('#heightControl');
@@ -126,6 +141,40 @@ export class Atelier {
     this.bindGestures();
     this.bindResizeHandle();
     this.bindDocks();
+    // Aide contextuelle : elle lit l'outil actif, rien de plus.
+    this.contextHelp = new ContextHelp(root, {
+      signal: this.signal,
+      lireOutil: () => this.project.ui.activeTool,
+    });
+
+    // Barre de menus : elle ne fait que cliquer les commandes existantes.
+    this.menuBar = new MenuBar(root, {
+      signal: this.signal,
+      onAide: (sujet) => this.montrerAide(sujet),
+    });
+
+    // Pointeur de brosse : l'empreinte réelle sous le doigt, miroirs compris.
+    this.brushCursor = new BrushCursor(this.artWrap, {
+      signal: this.signal,
+      lire: () => ({
+        outil: this.project.ui.activeTool,
+        rayonCm: this.project.ui.brushSizeCm,
+        elongation: this.project.ui.brushElongation || 0,
+        angleDeg: this.project.ui.brushAngle || 0,
+        suitLeTrace: !!this.project.ui.brushFollowStroke,
+        angleTrace: this.stroke?.direction?.angleDeg(this.project.ui.brushAngle || 0) ?? 0,
+        symetrie: this.project.ui.symmetry || 'none',
+        largeurCm: this.project.widthCm,
+        hauteurCm: this.project.heightCm,
+      }),
+    });
+
+    // Disques de couleur : ils écrivent dans les `<input type="color">` existants.
+    this.colorDiscs = [...root.querySelectorAll('[data-color-disc]')].map((hote) => {
+      const cible = root.querySelector('#' + hote.dataset.colorDisc);
+      return cible ? new ColorDisc(cible, hote, { signal: this.signal }) : null;
+    }).filter(Boolean);
+
     this.exportPanel = new ExportPanel(root, {
       lire: () => ({ project: this.project, hm: this.hm }),
       rendering: this.rendering,
@@ -154,6 +203,21 @@ export class Atelier {
         }
         this.scheduleSaveProject();
       },
+      onApplyEffect: (key) => {
+        const effect = EFFECTS[key];
+        if (!effect) return;
+        this.project = applyEffect(this.project, key);
+        this.syncControlsFromProject();
+        if (effect.scope === 'geometry') {
+          this.rebuild();
+          this.proWorkspace?.recordVariation('Effet de forme');
+        } else {
+          this.updateEnvironment();
+          this.render();
+        }
+        this.contextHelp?.afficher(effect.name, effect.description);
+        this.scheduleSaveProject();
+      },
     });
     this.bindMisc();
 
@@ -161,13 +225,18 @@ export class Atelier {
     this.applyShapeToDom();
     this.rebuild();
 
+    // Les vignettes de la boutique passent APRÈS le premier relief : elles
+    // coûtent onze reconstructions de champ, et l'œuvre de l'utilisateur passe
+    // avant le catalogue. Elles se calculent ensuite une par image.
+    this.boutique = new EffectPreviews(root, { signal: this.signal });
+    this.boutique.monter();
+
     // Les barres se placent d'après leur taille MESURÉE, or `bindDocks` a couru
     // avant que `syncControlsFromProject` ne remplisse les valeurs affichées :
     // la barre d'outils était alors plus courte de 13 px qu'elle ne le serait,
     // et son bord bas finissait 9 px sous la fenêtre. On la replace une fois le
     // contenu définitif en place.
-    this.toolbarDock?.apply();
-    this.miniDock?.apply();
+    // Plus aucune barre flottante à replacer : la mise en page les tient.
 
     this.resizeTimer = 0;
     this.observer = new ResizeObserver(() => {
@@ -222,6 +291,14 @@ export class Atelier {
       });
     }
 
+    if (this.symmetry) {
+      this.ecouter(this.symmetry, 'change', () => {
+        this.project.ui.symmetry = this.symmetry.value;
+        this.updateBrushDisplays();
+        this.scheduleSaveProject();
+      });
+    }
+
     if (this.brushFollow) {
       this.ecouter(this.brushFollow, 'change', () => {
         this.project.ui.brushFollowStroke = this.brushFollow.checked;
@@ -230,6 +307,30 @@ export class Atelier {
         this.scheduleSaveProject();
       });
     }
+  }
+
+  /**
+   * Reconstruit à qualité réduite tant que le geste dure, à pleine qualité
+   * quand il s'arrête.
+   *
+   * POURQUOI. Les trois familles procédurales introduites avec la boutique
+   * d'effets coûtent bien plus cher que le champ d'origine : mesuré sur un
+   * panneau de 200 × 120 cm, une reconstruction complète prend de 460 à 580 ms
+   * par 200 000 cellules, contre une centaine auparavant. Or `applyChange`
+   * reconstruisait à PLEINE qualité à chaque évènement `input` — soit à chaque
+   * pixel parcouru par le curseur. Le réglage devenait impraticable.
+   *
+   * La grille d'aperçu est deux fois plus grossière, donc quatre fois moins de
+   * cellules. Le relief est le MÊME champ, seulement échantillonné plus large :
+   * c'est la garantie que donne `buildHeightmap(…, { quality })`, et c'est déjà
+   * ce que fait l'aperçu de redimensionnement.
+   */
+  rebuildInteractif() {
+    clearTimeout(this.finGeste);
+    this.rebuild({ quality: 0.5 });
+    // 220 ms sans nouvel évènement : le curseur est relâché ou la main s'est
+    // arrêtée. On repasse alors à la grille complète.
+    this.finGeste = setTimeout(() => this.rebuild(), 220);
   }
 
   applyChange(id, binding, raw) {
@@ -245,7 +346,7 @@ export class Atelier {
       this.applyShapeToDom();
       this.rebuild();
     } else if (binding.scope === 'geometry') {
-      this.rebuild();
+      this.rebuildInteractif();
     } else {
       this.updateEnvironment();
       this.render();
@@ -268,15 +369,46 @@ export class Atelier {
     if (this.brushElongation) this.brushElongation.value = String(Math.round((this.project.ui.brushElongation || 0) * 100));
     if (this.brushAngle) this.brushAngle.value = String(Math.round(this.project.ui.brushAngle || 0));
     if (this.brushFollow) this.brushFollow.checked = !!this.project.ui.brushFollowStroke;
+    if (this.symmetry) this.symmetry.value = this.project.ui.symmetry || 'none';
     this.setTool(this.project.ui.activeTool || 'light');
     this.root.querySelectorAll('.preset').forEach((button) => {
-      button.classList.toggle('active', button.dataset.preset === this.project.ui.presetKey);
+      const actif = button.dataset.preset === this.project.ui.presetKey;
+      button.classList.toggle('active', actif);
+      button.setAttribute('aria-pressed', String(actif));
     });
+    this.syncFamilyControls();
     this.updateControlDisplays();
     this.updateBrushDisplays();
     this.refreshBaseButton();
     this.syncMiniPalette();
     this.proWorkspace?.sync();
+  }
+
+  /**
+   * Grise les commandes que la famille procédurale courante n'écoute pas.
+   *
+   * Le réseau de chenaux n'existe que dans la famille `organic` — voir la note
+   * de `channelCarve` dans `field.js`, où l'extension aux autres familles est
+   * mesurée et rejetée. Sur Cellules et Archipel, la molette « Chenaux » ne
+   * changeait donc RIEN : douze réglages différents, la même image au bit près.
+   *
+   * Une commande visible qui n'agit pas est un mensonge. Elle est désormais
+   * désactivée et dit pourquoi ; l'aide contextuelle reprend la même phrase.
+   */
+  syncFamilyControls() {
+    const molette = this.controls.channelWeight;
+    if (!molette) return;
+    const famille = this.project.geometry.family || 'organic';
+    const inerte = famille !== 'organic';
+    molette.disabled = inerte;
+    const etiquette = molette.closest('.control');
+    etiquette?.classList.toggle('control-inert', inerte);
+    etiquette?.setAttribute(
+      'title',
+      inerte
+        ? 'Les chenaux appartiennent à la famille « organique ». Cette composition n’en a pas.'
+        : 'Force des veines qui relient les cavités entre elles.'
+    );
   }
 
   updateControlDisplays() {
@@ -317,7 +449,6 @@ export class Atelier {
     if (this.brushAngle) this.brushAngle.disabled = suit;
 
     this.paintBrushPreview('#brushPreviewShape');
-    this.paintBrushPreview('#miniPreviewShape');
 
     for (const el of [this.brushSize, this.brushStrength, this.brushElongation, this.brushAngle]) {
       if (!el) continue;
@@ -405,6 +536,21 @@ export class Atelier {
     this.artWrap.dataset.shape = this.project.canvasShape;
     const shapeLocked = this.project.canvasShape !== 'rectangle';
     if (this.heightControl) this.heightControl.hidden = shapeLocked;
+
+    // LES BORNES DU CURSEUR SUIVENT LA FORME. Le balisage donne 1 à 500 cm pour
+    // toutes les formes, alors que `BOUNDS` plafonne le carré et le rond à 200.
+    // On pouvait donc porter un panneau rond à 400 cm au curseur, puis le voir
+    // ramené d'un coup à 200 au premier contact avec la poignée — le calque
+    // ayant entre-temps été réalloué pour 400.
+    const bornes = BOUNDS[this.project.canvasShape] || BOUNDS.rectangle;
+    if (this.controls.widthCm) {
+      this.controls.widthCm.min = String(bornes.widthCm.min);
+      this.controls.widthCm.max = String(bornes.widthCm.max);
+      if (Number(this.controls.widthCm.value) > bornes.widthCm.max) {
+        this.project.widthCm = bornes.widthCm.max;
+        this.controls.widthCm.value = String(bornes.widthCm.max);
+      }
+    }
     if (this.widthLabel) this.widthLabel.textContent = this.project.canvasShape === 'circle' ? 'Diamètre' : shapeLocked ? 'Côté' : 'Largeur';
 
     // Le cadenas n'a de sens que pour le rectangle : le carré et le rond
@@ -450,7 +596,7 @@ export class Atelier {
   }
 
   /** Reconstruit la heightmap puis rend. Réservé aux changements de géométrie. */
-  rebuild() {
+  rebuild({ quality = 1 } = {}) {
     const token = ++this.renderToken;
     this.rendering.classList.add('show');
     // Le report d'une image sert à peindre l'indicateur avant le calcul. Dans un
@@ -460,7 +606,7 @@ export class Atelier {
     const defer = document.hidden ? (fn) => setTimeout(fn, 0) : requestAnimationFrame;
     defer(() => {
       if (token !== this.renderToken) return;
-      this.hm = buildHeightmap(this.project, this.layer);
+      this.hm = buildHeightmap(this.project, this.layer, quality === 1 ? {} : { quality });
       this.render();
       this.rendering.classList.remove('show');
     });
@@ -503,10 +649,23 @@ export class Atelier {
 
   setTool(tool) {
     this.project.ui.activeTool = tool;
-    this.root.querySelectorAll('.tool[data-tool]').forEach((b) => b.classList.toggle('active', b.dataset.tool === tool));
+    // `aria-pressed` en plus de la classe : l'état actif ne vivait que dans le
+    // CSS, donc invisible à un lecteur d'écran — six boutons identiques à
+    // l'oreille, sans moyen de savoir lequel est choisi.
+    this.root.querySelectorAll('.tool[data-tool]').forEach((b) => {
+      const actif = b.dataset.tool === tool;
+      b.classList.toggle('active', actif);
+      b.setAttribute('aria-pressed', String(actif));
+    });
     const meta = TOOL_META[tool] || TOOL_META.light;
     this.hintSymbol.textContent = meta.icon;
     this.hintText.textContent = meta.hint;
+    // L'aide contextuelle retombe sur l'outil quand rien n'est survolé : elle
+    // doit donc suivre le changement d'outil, pas attendre le geste suivant.
+    this.contextHelp?.montrerOutil();
+    // Les entrées de menu héritent de l'état des boutons : un changement d'outil
+    // peut activer ou griser « Effacer la sculpture ».
+    this.menuBar?.rafraichir();
   }
 
   // ---- Gestes (§22) ----
@@ -685,20 +844,28 @@ export class Atelier {
   }
 
   stampAt(xCm, yCm, dxCm, dyCm, pressure, first) {
-    const rect = stamp(this.layer, {
-      tool: this.project.ui.activeTool,
-      xCm,
-      yCm,
-      dxCm,
-      dyCm,
-      radiusCm: this.project.ui.brushSizeCm,
-      strength: this.project.ui.brushStrength,
-      pressure,
-      elongation: this.project.ui.brushElongation,
-      angleDeg: this.strokeAngleDeg(dxCm, dyCm),
-      first,
-    });
-    if (rect) this.growDirty(rect);
+    // L'orientation se calcule UNE fois : `strokeAngleDeg` fait avancer le
+    // suiveur de direction, et l'appeler par miroir ferait tourner la brosse
+    // quatre fois plus vite qu'il n'y a de gestes.
+    const angleDeg = this.strokeAngleDeg(dxCm, dyCm);
+    const miroirs = SYMETRIES[this.project.ui.symmetry] || SYMETRIES.none;
+    for (const [sx, sy] of miroirs) {
+      const rect = stamp(this.layer, {
+        tool: this.project.ui.activeTool,
+        xCm: sx * xCm,
+        yCm: sy * yCm,
+        dxCm: sx * dxCm,
+        dyCm: sy * dyCm,
+        radiusCm: this.project.ui.brushSizeCm,
+        strength: this.project.ui.brushStrength,
+        pressure,
+        elongation: this.project.ui.brushElongation,
+        // Un seul miroir retourne l'ellipse ; deux la remettent d'aplomb.
+        angleDeg: sx * sy < 0 ? -angleDeg : angleDeg,
+        first,
+      });
+      if (rect) this.growDirty(rect);
+    }
     this.stroke.lastX = xCm;
     this.stroke.lastY = yCm;
   }
@@ -718,8 +885,13 @@ export class Atelier {
   queuePatch() {
     if (this.patchQueued) return;
     this.patchQueued = true;
+    // Le jeton est relu à l'arrivée : `#reliefCanvas` est PARTAGÉ entre ateliers
+    // successifs, et un patch en vol au moment d'un changement de projet
+    // peindrait le relief de l'ancien par-dessus le nouveau.
+    const token = this.renderToken;
     requestAnimationFrame(() => {
       this.patchQueued = false;
+      if (token !== this.renderToken) return;
       const rect = this.strokeDirty;
       this.strokeDirty = null;
       if (!rect || !this.hm) return;
@@ -893,9 +1065,10 @@ export class Atelier {
   previewResize() {
     if (this.resizePreviewQueued) return;
     this.resizePreviewQueued = true;
+    const token = this.renderToken;
     requestAnimationFrame(() => {
       this.resizePreviewQueued = false;
-      if (!this.resize) return;
+      if (token !== this.renderToken || !this.resize) return;
       this.hm = buildHeightmap(this.project, this.layer, { quality: 0.35 });
       this.render();
     });
@@ -913,84 +1086,26 @@ export class Atelier {
   // ---- Barres (§14, §15) ----
 
   bindDocks() {
-    const ui = this.project.ui;
-    ui.docks = ui.docks || {};
-
-    // La barre principale appartient maintenant au chrome de composition : elle
-    // ne flotte plus au-dessus de l’œuvre et n’a donc plus besoin d’ancrage.
-    // L’adaptateur conserve l’interface appelée par le reste du contrôleur.
-    this.toolbarDock = { apply() {}, destroy() {} };
-
-    this.miniDock = new Dock(this.root.querySelector('#miniPalette'), {
-      handle: this.root.querySelector('#miniHandle'),
-      artWrap: this.artWrap,
-      state: ui.docks.mini,
-      onPersist: (state) => {
-        ui.docks.mini = state;
-        this.scheduleSaveProject();
-      },
-    });
-
-    this.ecouter(this.root.querySelector('#miniToggle'), 'click', () => {
-      this.miniDock.setVisible(!this.miniDock.state.visible);
-    });
-
+    // La mini-palette a été retirée : depuis la refonte, son bouton d'ouverture
+    // gardait un attribut `hidden` jamais levé, si bien qu'elle était devenue
+    // inatteignable — et la barre d'outils, désormais permanente au-dessus de
+    // l'œuvre, en tenait déjà le rôle. Ne reste donc aucune barre flottante.
     this.ecouter(this.root.querySelector('#resetView'), 'click', () => this.recentreView());
-
-    // La mini-palette n'a pas d'état propre : elle pilote les mêmes réglages
-    // que la barre principale, et les deux restent synchronisées.
-    this.root.querySelectorAll('[data-mini-tool]').forEach((button) => {
-      this.ecouter(button, 'click', () => {
-        this.setTool(button.dataset.miniTool);
-        this.syncMiniPalette();
-        this.scheduleSaveProject();
-      });
-    });
-    const miniSize = this.root.querySelector('#miniSize');
-    const miniStrength = this.root.querySelector('#miniStrength');
-    const miniElongation = this.root.querySelector('#miniElongation');
-    if (miniElongation) {
-      this.ecouter(miniElongation, 'input', () => {
-        this.brushElongation.value = miniElongation.value;
-        this.brushElongation.dispatchEvent(new Event('input', { bubbles: true }));
-      });
-    }
-    this.ecouter(miniSize, 'input', () => {
-      this.brushSize.value = miniSize.value;
-      this.brushSize.dispatchEvent(new Event('input', { bubbles: true }));
-      this.syncMiniPalette();
-    });
-    this.ecouter(miniStrength, 'input', () => {
-      this.brushStrength.value = miniStrength.value;
-      this.brushStrength.dispatchEvent(new Event('input', { bubbles: true }));
-      this.syncMiniPalette();
-    });
-    this.syncMiniPalette();
   }
 
-  syncMiniPalette() {
-    const miniSize = this.root.querySelector('#miniSize');
-    const miniStrength = this.root.querySelector('#miniStrength');
-    if (!miniSize) return;
-    miniSize.value = this.brushSize.value;
-    miniStrength.value = this.brushStrength.value;
-    this.root.querySelector('#miniSizeValue').value = `${miniSize.value} cm`;
-    this.root.querySelector('#miniStrengthValue').value = `${miniStrength.value} %`;
-    const miniElongation = this.root.querySelector('#miniElongation');
-    const miniElongationOut = this.root.querySelector('#miniElongationValue');
-    if (miniElongation && this.brushElongation) {
-      miniElongation.value = this.brushElongation.value;
-      const min = Number(miniElongation.min);
-      const max = Number(miniElongation.max);
-      miniElongation.style.setProperty('--range', (((Number(miniElongation.value) - min) / (max - min)) * 100).toFixed(2) + '%');
-      if (miniElongationOut) {
-        const { aspect } = brushAxes(1, Number(miniElongation.value) / 100);
-        miniElongationOut.value = aspect < 1.02 ? 'ronde' : `${aspect.toFixed(1).replace('.', ',')} : 1`;
-      }
+  /** La mini-palette n'existe plus ; ce point d'entrée reste appelé ailleurs. */
+  syncMiniPalette() {}
+
+  /** Entrées du menu Aide : elles écrivent dans l'encart d'aide, pas ailleurs. */
+  montrerAide(sujet) {
+    if (sujet === 'raccourcis') {
+      this.contextHelp?.afficher('Raccourcis clavier', RACCOURCIS.map(([k, v]) => `${k} — ${v}`).join(' · '));
+    } else if (sujet === 'apropos') {
+      this.contextHelp?.afficher(
+        'Atelier de relief organique',
+        'Le relief est calculé en centimètres réels, dans votre navigateur. Rien n’est envoyé nulle part, et l’image exportée part de la même carte de hauteurs que l’aperçu.'
+      );
     }
-    this.root.querySelectorAll('[data-mini-tool]').forEach((b) => {
-      b.classList.toggle('active', b.dataset.miniTool === this.project.ui.activeTool);
-    });
   }
 
   // ---- Divers ----
@@ -1023,7 +1138,32 @@ export class Atelier {
       this.scheduleSaveSculpt();
     });
 
+    // Raccourcis. Ils CLIQUENT les commandes existantes plutôt que d'appeler
+    // les méthodes : un raccourci ne peut donc pas faire autre chose que le
+    // bouton qu'il annonce, et il hérite de son état désactivé.
+    const LETTRE_OUTIL = { l: 'light', o: 'warp', c: 'dig', b: 'raise', s: 'smooth', g: 'erase' };
     this.onWindow('keydown', (event) => {
+      const dansUnChamp = /^(INPUT|SELECT|TEXTAREA)$/.test(event.target?.tagName || '') || event.target?.isContentEditable;
+      if (!dansUnChamp && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        const outil = LETTRE_OUTIL[event.key.toLowerCase()];
+        if (outil) {
+          event.preventDefault();
+          this.root.querySelector(`.tool[data-tool="${outil}"]`)?.click();
+          return;
+        }
+      }
+      if (event.ctrlKey || event.metaKey) {
+        const cibles = { e: '#exportRun', r: '#variationTop', n: '#newProject', 0: '#resetView' };
+        const selecteur = cibles[event.key.toLowerCase()];
+        if (selecteur) {
+          const bouton = this.root.querySelector(selecteur);
+          if (bouton && !bouton.disabled) {
+            event.preventDefault();
+            bouton.click();
+            return;
+          }
+        }
+      }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
         event.preventDefault();
         if (event.shiftKey) this.history.redo();
@@ -1044,6 +1184,45 @@ export class Atelier {
     };
     this.ecouter(drawerToggle, 'click', () => setDrawer(!sidebar.classList.contains('open')));
     this.ecouter(backdrop, 'click', () => setDrawer(false));
+    // Échap ferme le tiroir et rend le focus à son bouton : sans cela, un
+    // utilisateur au clavier entrait dans le tiroir sans pouvoir en sortir.
+    this.onWindow('keydown', (event) => {
+      if (event.key !== 'Escape' || !sidebar.classList.contains('open')) return;
+      setDrawer(false);
+      drawerToggle.focus();
+    });
+
+    // « Paramètres avancés » était un `<div>` orné d'un chevron qui ne repliait
+    // rien. C'est maintenant un vrai dépliant.
+    const avance = this.root.querySelector('#advancedToggle');
+    const sections = this.root.querySelector('#inspectorSections');
+    if (avance && sections) {
+      const replier = (ouvert) => {
+        avance.setAttribute('aria-expanded', String(ouvert));
+        sections.hidden = !ouvert;
+      };
+      replier(true);
+      this.ecouter(avance, 'click', () => replier(avance.getAttribute('aria-expanded') !== 'true'));
+    }
+
+    // La poignée de redimensionnement recevait le focus sans rien faire au
+    // clavier. Les flèches ajustent maintenant le panneau centimètre par
+    // centimètre, Maj par pas de dix.
+    const poignee = this.root.querySelector('#resizeHandle');
+    if (poignee) {
+      this.ecouter(poignee, 'keydown', (event) => {
+        const pas = (event.shiftKey ? 10 : 1) * (['ArrowRight', 'ArrowDown'].includes(event.key) ? 1 : -1);
+        const axe = ['ArrowLeft', 'ArrowRight'].includes(event.key) ? 'widthCm' : ['ArrowUp', 'ArrowDown'].includes(event.key) ? 'heightCm' : null;
+        if (!axe) return;
+        event.preventDefault();
+        const commande = this.controls[axe];
+        if (!commande || commande.disabled) return;
+        const min = Number(commande.min);
+        const max = Number(commande.max);
+        commande.value = String(clamp(Number(commande.value) + pas, min, max));
+        commande.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    }
   }
 
   /**
@@ -1109,11 +1288,14 @@ export class Atelier {
     // affichait le relief de l'ancien — deux images stables et différentes pour
     // un même projet, selon qu'un rendu fantôme était encore en vol.
     this.renderToken++;
+    // Le report de 120 ms de l'observateur de taille n'était jamais annulé :
+    // redimensionner la fenêtre puis ouvrir un autre projet dans l'intervalle
+    // faisait rendre l'ancien atelier sur le canvas du nouveau.
+    clearTimeout(this.resizeTimer);
+    clearTimeout(this.finGeste);
     this.observer.disconnect();
     this.store.destroy();
     this.listeners.abort();
-    this.toolbarDock?.destroy();
-    this.miniDock?.destroy();
     this.proWorkspace?.destroy();
   }
 }

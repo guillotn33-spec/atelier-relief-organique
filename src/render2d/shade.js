@@ -37,7 +37,7 @@ import { clamp, hexToRgb } from '../core/math.js';
 export const FINISHES = {
   mat: { specular: 0, shininess: 1, metal: 0, roughness: 1.0 },
   satine: { specular: 0.14, shininess: 10, metal: 0, roughness: 0.55 },
-  brillant: { specular: 0.5, shininess: 58, metal: 0, roughness: 0.22 },
+  brillant: { specular: 0.58, shininess: 58, metal: 0, roughness: 0.22 },
   chrome: { specular: 0.9, shininess: 150, metal: 1, roughness: 0.08 },
 };
 

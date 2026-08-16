@@ -14,11 +14,12 @@ function quantize(value, min, step) {
 }
 
 export class ProWorkspace {
-  constructor(root, { lire, onRestoreVariation, onWorkspaceMode } = {}) {
+  constructor(root, { lire, onRestoreVariation, onWorkspaceMode, onApplyEffect } = {}) {
     this.root = root;
     this.lire = lire;
     this.onRestoreVariation = onRestoreVariation;
     this.onWorkspaceMode = onWorkspaceMode;
+    this.onApplyEffect = onApplyEffect;
     const savedVariations = lire?.()?.ui?.variationSnapshots;
     this.variations = Array.isArray(savedVariations) ? clone(savedVariations).slice(-8) : [];
     this.drag = null;
@@ -30,6 +31,7 @@ export class ProWorkspace {
     this.bindBottomPanel();
     this.bindInspectorNavigation();
     this.bindHistory();
+    this.bindEffectStore();
     if (this.variations.length) this.renderVariations();
     else this.recordVariation('Point de départ');
     this.sync();
@@ -40,7 +42,10 @@ export class ProWorkspace {
       const input = this.root.querySelector(`#${knob.dataset.control}`);
       if (!input) return;
 
-      input.addEventListener('input', () => this.syncKnob(knob, input), { signal: this.signal });
+      input.addEventListener('input', () => {
+        this.syncKnob(knob, input);
+        this.syncValueTracks();
+      }, { signal: this.signal });
 
       knob.addEventListener('pointerdown', (event) => {
         if (event.button !== 0) return;
@@ -142,12 +147,84 @@ export class ProWorkspace {
       const input = this.root.querySelector(`#${knob.dataset.control}`);
       if (input) this.syncKnob(knob, input);
     });
+    this.syncEffectStore();
+    this.syncValueTracks();
+  }
+
+  syncValueTracks() {
+    this.root.querySelectorAll('[data-linked-control]').forEach((control) => {
+      const input = this.root.querySelector(`#${control.dataset.linkedControl}`);
+      if (!input) return;
+      const min = Number(input.min);
+      const max = Number(input.max);
+      const ratio = max === min ? 0 : clamp((Number(input.value) - min) / (max - min), 0, 1);
+      const key = control.dataset.linkedControl;
+      this.root.querySelectorAll(`[data-track-progress="${key}"]`).forEach((bar) => { bar.style.width = `${ratio * 100}%`; });
+      this.root.querySelectorAll(`[data-track-node="${key}"]`).forEach((node) => { node.style.left = `${ratio * 100}%`; });
+      const formatted = this.root.querySelector(`#${key}Value`);
+      this.root.querySelectorAll(`[data-linked-value="${key}"]`).forEach((output) => {
+        output.textContent = formatted?.value || formatted?.textContent || input.value;
+      });
+    });
+  }
+
+  bindEffectStore() {
+    this.root.querySelectorAll('.effect-item[data-effect]').forEach((button) => {
+      button.addEventListener('click', () => {
+        this.root.querySelectorAll('.effect-item[data-effect]').forEach((item) => item.classList.toggle('active', item === button));
+        this.onApplyEffect?.(button.dataset.effect);
+      }, { signal: this.signal });
+    });
+
+    const search = this.root.querySelector('#effectSearch');
+    search?.addEventListener('input', () => {
+      const query = search.value.trim().toLocaleLowerCase('fr');
+      this.root.querySelectorAll('.effect-item, .prototype-category .preset-card').forEach((item) => {
+        // Le `title` porte « nom — description » : chercher « rasante » ou
+        // « alvéol » trouve donc aussi les articles dont seule la description le
+        // dit. Le texte visible seul ne suffisait pas.
+        const matiere = `${item.textContent} ${item.title || ''}`.toLocaleLowerCase('fr');
+        item.hidden = query.length > 0 && !matiere.includes(query);
+      });
+      this.root.querySelectorAll('.effect-category').forEach((category) => {
+        const visible = [...category.querySelectorAll('.effect-item, .preset-card')].some((item) => !item.hidden);
+        category.hidden = query.length > 0 && !visible;
+        if (query && visible) category.open = true;
+      });
+    }, { signal: this.signal });
+
+    this.root.querySelector('#effectRandomize')?.addEventListener('click', () => this.root.querySelector('#newVariation')?.click(), { signal: this.signal });
+  }
+
+  syncEffectStore() {
+    const project = this.lire?.();
+    if (!project) return;
+    const key = project.ui?.activeEffectKey || 'organic-relief';
+    this.root.querySelectorAll('.effect-item[data-effect]').forEach((button) => button.classList.toggle('active', button.dataset.effect === key));
+    const name = this.root.querySelector('#activeEffectName');
+    const category = this.root.querySelector('#activeEffectCategory');
+    if (name) name.textContent = project.ui?.activeEffectName || 'Relief organique';
+    // `[data-effect]` et non `.effect-item[data-effect]` : les trois vignettes de
+    // prototype portent désormais la clé de leur signature de référence, et sont
+    // donc des entrées du catalogue à part entière.
+    const selected = this.root.querySelector(`[data-effect="${key}"]`)?.closest('[data-effect-category]');
+    const type = selected?.dataset.effectCategory;
+    if (category) {
+      category.textContent = type === 'material' ? 'Matière'
+        : type === 'lighting' ? 'Éclairage'
+          : type === 'reference' ? 'Signature de référence'
+            : 'Forme organique';
+    }
   }
 
   bindWorkspaceTabs() {
     this.root.querySelectorAll('[data-workspace-mode]').forEach((button) => {
       button.addEventListener('click', () => {
-        this.root.querySelectorAll('[data-workspace-mode]').forEach((item) => item.classList.toggle('active', item === button));
+        this.root.querySelectorAll('[data-workspace-mode]').forEach((item) => {
+          const actif = item === button;
+          item.classList.toggle('active', actif);
+          item.setAttribute('aria-current', actif ? 'page' : 'false');
+        });
         this.onWorkspaceMode?.(button.dataset.workspaceMode);
       }, { signal: this.signal });
     });
@@ -172,12 +249,23 @@ export class ProWorkspace {
       }, { signal: this.signal });
     });
     this.root.querySelector('[data-bottom-collapse]')?.addEventListener('click', () => panel?.classList.toggle('collapsed'), { signal: this.signal });
+    this.root.querySelectorAll('[data-linked-control]').forEach((control) => {
+      control.addEventListener('click', () => {
+        const input = this.root.querySelector(`#${control.dataset.linkedControl}`);
+        this.openInspector('composition');
+        input?.focus({ preventScroll: true });
+      }, { signal: this.signal });
+    });
   }
 
   bindInspectorNavigation() {
     this.root.querySelectorAll('[data-layer-target]').forEach((row) => {
       row.addEventListener('click', () => {
-        this.root.querySelectorAll('[data-layer-target]').forEach((item) => item.classList.toggle('active', item === row));
+        this.root.querySelectorAll('[data-layer-target]').forEach((item) => {
+          const actif = item === row;
+          item.classList.toggle('active', actif);
+          item.setAttribute('aria-current', actif ? 'true' : 'false');
+        });
         this.openInspector(row.dataset.layerTarget);
       }, { signal: this.signal });
     });
@@ -193,7 +281,10 @@ export class ProWorkspace {
     const section = this.root.querySelector(`[data-inspector-section="${name}"]`);
     if (!section) return;
     section.open = true;
-    section.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    // Le défilement animé ignorait `prefers-reduced-motion` : une option passée
+    // en JavaScript prime sur le `scroll-behavior: auto !important` du CSS.
+    const douceurRefusee = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    section.scrollIntoView({ block: 'nearest', behavior: douceurRefusee ? 'auto' : 'smooth' });
     this.root.querySelector('#sidebar')?.classList.add('open');
     if (matchMedia('(max-width: 920px)').matches) {
       this.root.querySelector('#backdrop')?.classList.add('show');
@@ -244,7 +335,11 @@ export class ProWorkspace {
       copy.append(strong, small);
       button.append(thumb, copy);
       button.addEventListener('click', () => {
-        this.root.querySelectorAll('.variation-card').forEach((card) => card.classList.toggle('active', card === button));
+        this.root.querySelectorAll('.variation-card').forEach((card) => {
+          const actif = card === button;
+          card.classList.toggle('active', actif);
+          card.setAttribute('aria-current', actif ? 'true' : 'false');
+        });
         this.onRestoreVariation?.(clone(item));
       }, { signal: this.signal });
       strip.append(button);

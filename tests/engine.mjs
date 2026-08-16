@@ -155,32 +155,45 @@ check('A1 — aucun îlot enclavé dans les trois préréglages', presetIslands 
 // où la bande de chenaux dérive de celle des bassins. Les deux sont hors
 // périmètre ici. Ce test enregistre donc l'état réel, format par format.
 const SIZES = [
-  { widthCm: 160, heightCm: 100, medianMax: 2 },
-  { widthCm: 200, heightCm: 120, medianMax: 4 },
-  { widthCm: 300, heightCm: 180, medianMax: 6 },
+  { widthCm: 160, heightCm: 100, partMax: 2 },
+  { widthCm: 200, heightCm: 120, partMax: 4 },
+  { widthCm: 300, heightCm: 180, partMax: 6 },
 ];
+
+// LA STATISTIQUE PORTE SUR LES VARIATIONS, PAS SUR LES ÎLOTS.
+//
+// La version précédente prenait la médiane de la liste des proéminences des
+// îlots TROUVÉS, les variations propres étant absentes de la liste. Cette
+// médiane monte donc quand le nombre d'îlots baisse : mesuré sur Archipel,
+// six îlots à 16,3 % notaient MIEUX qu'un seul à 18,2 %, et vingt-trois petits
+// îlots (19,4 %) notaient presque comme l'unique de la version saine (18,5 %).
+// L'oracle récompensait la prolifération et punissait la rareté — l'inverse de
+// la propriété visée.
+//
+// La grandeur retenue est celle que voit l'utilisateur : sur cent variations
+// tirées, combien portent une bosse enclavée que l'œil remarque. Le seuil de
+// visibilité est 5 %, calibré sur le relief témoin de A0 — sa bosse fabriquée
+// pour être vue mesure 5,9 %.
+const VISIBLE_PCT = 5;
 
 for (const size of SIZES) {
   const prominences = [];
-  let variantsChecked = 0;
   for (const preset of Object.values(PRESETS)) {
     let geometry = { ...defaultGeometry(), ...preset.geometry };
     for (let i = 0; i < 16; i++) {
       geometry = nextVariation(geometry);
       const project = makeProject(geometry, size);
-      const a = analyseRelief(buildHeightmap(project, null));
-      if (a.maxProminencePct > 0) prominences.push(a.maxProminencePct);
-      variantsChecked++;
+      prominences.push(analyseRelief(buildHeightmap(project, null)).maxProminencePct);
     }
   }
-  prominences.sort((a, b) => b - a);
-  const median = prominences.length ? prominences[Math.floor(prominences.length / 2)] : 0;
-  const max = prominences[0] || 0;
-  console.log(`   ${size.widthCm} × ${size.heightCm} cm : ${prominences.length} îlot(s) sur ${variantsChecked} variations — max ${max.toFixed(2)} %, médiane ${median.toFixed(2)} %`);
+  const visibles = prominences.filter((p) => p > VISIBLE_PCT).length;
+  const part = (100 * visibles) / prominences.length;
+  const max = Math.max(...prominences);
+  console.log(`   ${size.widthCm} × ${size.heightCm} cm : ${visibles} variation(s) sur ${prominences.length} portent un îlot visible — ${part.toFixed(1)} %, pire proéminence ${max.toFixed(2)} %`);
   check(
-    `A2 — îlot médian sous ${size.medianMax} % sur ${size.widthCm} × ${size.heightCm} cm`,
-    median < size.medianMax,
-    `médiane ${median.toFixed(2)} %, maximum ${max.toFixed(2)} %`
+    `A2 — moins de ${size.partMax} % des variations portent un îlot visible sur ${size.widthCm} × ${size.heightCm} cm`,
+    part <= size.partMax,
+    `${part.toFixed(1)} % des variations, pire proéminence ${max.toFixed(2)} %`
   );
 }
 

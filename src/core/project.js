@@ -84,6 +84,7 @@ export function validateDimensions(shape, input) {
 export function defaultGeometry() {
   return {
     engine: 'organic-v2',
+    family: 'organic',
     seed: 2749,
     variationSeed: 0,
     domainOffsetXCm: 0,
@@ -190,8 +191,14 @@ export function defaultUi() {
     // Quand il est vrai, l'orientation est reprise du GESTE et `brushAngle` est
     // ignoré : la brosse se couche dans le sens du trait.
     brushFollowStroke: false,
+    // Symétrie de sculpture : 'none', 'x' (gauche/droite), 'y' (haut/bas) ou
+    // 'xy'. Elle ne concerne QUE les gestes ; le relief généré, lui, n'est pas
+    // miroité — sans quoi choisir une symétrie changerait la composition.
+    symmetry: 'none',
     presetKey: 'dunes',
     designName: 'Dunes',
+    activeEffectKey: 'fluid-dunes',
+    activeEffectName: 'Dunes fluides',
 
     // Verrou du rapport largeur/hauteur (§3). Le carré et le rond l'imposent
     // par définition ; ce réglage ne concerne donc que le rectangle.
@@ -373,39 +380,58 @@ function clampTo(value, bound) {
 export const PRESETS = {
   dunes: {
     name: 'Dunes',
+    effectKey: 'dunes-reference',
     geometry: {
-      seed: 2749, domainOffsetXCm: 0, domainOffsetYCm: 0, variationSeed: 0,
-      basinScaleCm: 44, channelRatio: 0.55, channelWeight: 0.58, density: 0.50,
-      elongation: 0.38, orientationDeg: 16, warpAmount: 0.50, irregularity: 0.30,
-      depth: 0.95, softness: 0.50, wave: 0.55, shoulder: 0.58, fuse: 0.60,
+      family: 'organic', seed: 2749, domainOffsetXCm: 0, domainOffsetYCm: 0, variationSeed: 0,
+      basinScaleCm: 38, channelRatio: 0.58, channelWeight: 0.30, density: 0.50,
+      elongation: 0.82, orientationDeg: 8, warpAmount: 0.68, irregularity: 0.18,
+      depth: 0.62, softness: 0.46, wave: 0.56, shoulder: 0.58, fuse: 0.72,
     },
-    material: { color: '#e8e4dc', texture: 0.3 },
-    lighting: { angle: 245, height: 42, contrast: 0.8, backlight: 0.58, exposureEv: 0, shadowStrength: 0.55, cavityOcclusion: 0.5 },
-    presentation: { panelLayout: 'none', frame: true, wallColor: '#d8d3c9' },
+    material: { color: '#e7e5e5', texture: 0.30, finish: 'mat' },
+    // LUMIÈRE RASANTE — c'est ce réglage, et non l'exposition, qui donne aux
+    // photos leur étendue tonale. Longtemps l'écart s'est joué sur l'exposition
+    // et le contraste : baisser l'exposition ramenait bien la médiane, mais
+    // éteignait aussi les plateaux, et l'étendue plafonnait à 123 contre 169
+    // mesurés sur ref-1. Une lumière basse creuse les cavités SANS toucher aux
+    // sommets, qui restent face à la source : à 20° d'élévation, p95 219 pour
+    // 221 visés. La hauteur de lumière est le levier de l'étendue ; l'exposition
+    // ne fait que translater l'ensemble.
+    lighting: { angle: 232, height: 20, contrast: 0.86, backlight: 0.55, exposureEv: 0.05, shadowStrength: 0.60, cavityOcclusion: 0.60 },
+    presentation: { panelLayout: '2x2', frame: false, wallColor: '#8e8883' },
   },
   cellules: {
     name: 'Cellules',
+    effectKey: 'cellules-reference',
     geometry: {
-      seed: 8315, domainOffsetXCm: 0, domainOffsetYCm: 0, variationSeed: 0,
-      basinScaleCm: 38, channelRatio: 0.64, channelWeight: 0.20, density: 0.60,
-      elongation: 0.10, orientationDeg: 0, warpAmount: 0.28, irregularity: 0.30,
-      depth: 0.86, softness: 0.50, wave: 0.26, shoulder: 0.56, fuse: 0.30,
+      family: 'cells', seed: 8315, domainOffsetXCm: 0, domainOffsetYCm: 0, variationSeed: 0,
+      basinScaleCm: 22, channelRatio: 0.60, channelWeight: 0.08, density: 0.76,
+      elongation: 0.04, orientationDeg: 0, warpAmount: 0.42, irregularity: 0.38,
+      depth: 0.64, softness: 0.24, wave: 0.18, shoulder: 0.36, fuse: 0.30,
     },
-    material: { color: '#d8d2c7', texture: 0.34 },
-    lighting: { angle: 218, height: 42, contrast: 0.78, backlight: 0.68, exposureEv: 0, shadowStrength: 0.5, cavityOcclusion: 0.45 },
-    presentation: { panelLayout: '2x2', frame: false, wallColor: '#c9c4ba' },
+    material: { color: '#e7e4e3', texture: 0.32, finish: 'mat' },
+    // Ref-2 est plus haute en clé que ref-1 : ses ombres ne descendent qu'à 66
+    // et un cinquième de l'image seulement est sombre. Cellules garde donc la
+    // lumière basse, qui tient les plateaux à 221, mais avec des ombres portées
+    // faibles — la densité de cavités, montée à 0,76, suffit à faire descendre
+    // la médiane sans creuser de noirs que la photo n'a pas.
+    lighting: { angle: 224, height: 22, contrast: 0.90, backlight: 0.56, exposureEv: 0.05, shadowStrength: 0.10, cavityOcclusion: 0.45 },
+    presentation: { panelLayout: '2x2', frame: false, wallColor: '#978f88' },
   },
   archipel: {
     name: 'Archipel',
+    effectKey: 'archipel-reference',
     geometry: {
-      seed: 5172, domainOffsetXCm: 0, domainOffsetYCm: 0, variationSeed: 0,
-      basinScaleCm: 44, channelRatio: 0.58, channelWeight: 0.72, density: 0.56,
-      elongation: 0.26, orientationDeg: 42, warpAmount: 0.62, irregularity: 0.48,
-      depth: 0.88, softness: 0.52, wave: 0.58, shoulder: 0.50, fuse: 0.70,
+      family: 'archipelago', seed: 5172, domainOffsetXCm: 0, domainOffsetYCm: 0, variationSeed: 0,
+      basinScaleCm: 12, channelRatio: 0.62, channelWeight: 0.48, density: 0.49,
+      elongation: 0.34, orientationDeg: 14, warpAmount: 0.70, irregularity: 0.46,
+      depth: 0.70, softness: 0.40, wave: 0.48, shoulder: 0.52, fuse: 0.58,
     },
-    material: { color: '#e4dfd6', texture: 0.18 },
-    lighting: { angle: 232, height: 38, contrast: 0.83, backlight: 0.48, exposureEv: 0, shadowStrength: 0.6, cavityOcclusion: 0.55 },
-    presentation: { panelLayout: '2x2', frame: false, wallColor: '#d5d0c6' },
+    material: { color: '#e3e1e2', texture: 0.24, finish: 'mat' },
+    // Ref-3 est la plus claire des trois : p5 à 67, 14 % de sombre seulement.
+    // C'est un panneau ouvert, éclairé sans dramatisation. Ombres et occlusion
+    // restent donc au plus bas ; la lumière rasante et le contraste font tout.
+    lighting: { angle: 228, height: 22, contrast: 0.70, backlight: 0.48, exposureEv: 0.05, shadowStrength: 0.10, cavityOcclusion: 0.15 },
+    presentation: { panelLayout: 'none', frame: true, wallColor: '#a8a39e' },
   },
 };
 
@@ -420,7 +446,17 @@ export function applyPreset(project, key) {
     material: { ...project.material, ...preset.material },
     lighting: { ...project.lighting, ...preset.lighting },
     presentation: { ...project.presentation, ...preset.presentation },
-    ui: { ...project.ui, presetKey: key, designName: preset.name },
+    ui: {
+      ...project.ui,
+      presetKey: key,
+      designName: preset.name,
+      // Le prototype et l'effet qu'il déclare sont désormais la MÊME chose : la
+      // signature de référence porte le nom du préréglage et sa géométrie. La
+      // table de correspondance qui traduisait ici trois clés en trois libellés
+      // pouvait mentir, et mentait — Archipel s'annonçait « Relief organique ».
+      activeEffectKey: preset.effectKey,
+      activeEffectName: preset.name,
+    },
     updatedAt: Date.now(),
   };
 }
