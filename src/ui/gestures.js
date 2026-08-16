@@ -107,22 +107,26 @@ export class GestureManager {
       return this.role;
     }
 
-    if (zone === 'outside') {
-      this.primaryId = p.id;
-      this.setRole(ROLE.PAN);
-      this.hooks.onPanStart?.(p);
-      return this.role;
-    }
-
-    // Sur l'œuvre.
+    // Stylet et souris ne sont jamais ambigus : décision immédiate.
     if (p.type === 'pen' || p.type === 'mouse') {
       this.primaryId = p.id;
-      this.beginCanvasRole(p);
+      if (zone === 'outside') {
+        this.setRole(ROLE.PAN);
+        this.hooks.onPanStart?.(p);
+      } else {
+        this.beginCanvasRole(p);
+      }
       return this.role;
     }
 
     // Doigt seul : décision différée, sans le moindre effet de bord entre-temps.
-    this.pending = { id: p.id, startedAt: p.time, samples: [p] };
+    //
+    // L'attente vaut AUSSI hors de l'œuvre. Elle ne couvrait d'abord que la
+    // toile, si bien qu'en vue 3D — où tout glisser est une orbite — le premier
+    // doigt verrouillait « orbite » avant l'arrivée du second : le pinch ne
+    // pouvait jamais se former. Un doigt posé n'importe où peut être le premier
+    // d'un pinch.
+    this.pending = { id: p.id, startedAt: p.time, zone, samples: [p] };
     return ROLE.NONE;
   }
 
@@ -227,10 +231,16 @@ export class GestureManager {
 
   resolvePending() {
     if (!this.pending) return;
-    const { samples } = this.pending;
+    const { samples, zone } = this.pending;
     this.pending = null;
     const first = samples[0];
     this.primaryId = first.id;
+    if (zone === 'outside') {
+      this.setRole(ROLE.PAN);
+      this.hooks.onPanStart?.(first);
+      for (let i = 1; i < samples.length; i++) this.hooks.onPanMove?.(samples[i]);
+      return;
+    }
     this.beginCanvasRole(first);
     // Les points retenus pendant l'arbitrage sont rejoués : le trait démarre
     // bien là où le doigt s'est posé, sans latence perceptible.

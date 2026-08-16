@@ -11,6 +11,7 @@ import { BOUNDS, PRESETS, applyPreset, aspectOf, baseGeometryOf, captureBase } f
 import { GestureManager, ROLE } from './gestures.js';
 import { Viewport } from './viewport.js';
 import { Dock } from './dock.js';
+import { Viewer3D } from '../render3d/viewer.js';
 import { nextVariation } from '../geometry/variation.js';
 import { buildHeightmap, updateHeightmapRect } from '../geometry/heightmap.js';
 import { SwellAnimator } from '../geometry/animator.js';
@@ -108,6 +109,11 @@ export class Atelier {
     // Vrai dès qu'un geste occupe l'atelier, quel que soit son rôle.
     this.gestureActive = false;
     this.resize = null;
+    // Vue courante. La sculpture reste l'affaire de la 2D : en volume, l'œuvre
+    // se regarde et s'exporte. Le dire est plus honnête que de proposer un
+    // pinceau qui tomberait à côté.
+    this.view = '2d';
+    this.viewer3d = null;
 
     // Qualité de départ de l'animation : 0,22 et non 0,45.
     //
@@ -144,7 +150,10 @@ export class Atelier {
       clearTimeout(this.resizeTimer);
       // Simple changement de taille d'affichage : le relief ne change pas,
       // seule la résolution de sortie est refaite.
-      this.resizeTimer = setTimeout(() => this.render(), 120);
+      this.resizeTimer = setTimeout(() => {
+        this.render();
+        this.refresh3d();
+      }, 120);
     });
     this.observer.observe(this.artWrap);
   }
@@ -305,6 +314,7 @@ export class Atelier {
       if (token !== this.renderToken) return;
       this.hm = buildHeightmap(this.project, this.layer);
       this.render();
+      this.refresh3d();
       this.rendering.classList.remove('show');
       if (this.anim.enabled) this.restartAnim();
     });
@@ -316,6 +326,12 @@ export class Atelier {
     const { outW, outH } = this.outputSize();
     this.updateEnvironment();
     renderFull(this.canvas, this.project, this.hm, outW, outH, this.cache);
+    // La 3D partage la MÊME heightmap : un changement de matière ou de lumière
+    // n'a pas à reconstruire le mesh, seulement à réappliquer l'apparence.
+    if (this.view === '3d' && this.viewer3d) {
+      this.viewer3d.setAppearance(this.project);
+      this.viewer3d.render();
+    }
     this.updateControlDisplays();
   }
 
@@ -367,6 +383,7 @@ export class Atelier {
       activeTool: () => this.project.ui.activeTool,
       hitTest: (p) => this.zoneOf(p),
       onRoleChange: (role) => {
+        if (role !== ROLE.NONE) this.lastRole = role;
         // L'animation est suspendue pendant TOUT geste, quel qu'il soit : il n'y
         // a donc aucune interaction animation × pinch × trait à gérer.
         this.gestureActive = role !== ROLE.NONE;
@@ -379,10 +396,34 @@ export class Atelier {
       onSculptEnd: () => this.endStroke(),
       onLightStart: (p) => this.moveLight(p),
       onLightMove: (p) => this.moveLight(p),
-      onCameraStart: (s) => this.viewport.beginPinch(s),
-      onCameraMove: (s) => this.viewport.updatePinch(s),
-      onPanStart: (p) => this.viewport.beginPan(p),
-      onPanMove: (p) => this.viewport.updatePan(p),
+      onCameraStart: (s) => {
+        if (this.view === '3d') this.pinch3d = { distance: this.viewer3d.distance, start: Math.max(1, s.distance) };
+        else this.viewport.beginPinch(s);
+      },
+      onCameraMove: (s) => {
+        if (!s) return;
+        if (this.view === '3d') {
+          if (this.pinch3d) this.viewer3d.setDistance(this.pinch3d.distance / (s.distance / this.pinch3d.start));
+          this.render3d();
+        } else this.viewport.updatePinch(s);
+      },
+      onPanStart: (p) => {
+        if (this.view === '3d') this.orbitFrom = { x: p.x, y: p.y };
+        else this.viewport.beginPan(p);
+      },
+      onPanMove: (p) => {
+        if (this.view === '3d') {
+          if (!this.orbitFrom) return;
+          // Un déplacement d'une largeur d'écran fait un demi-tour : le geste
+          // reste prévisible quelle que soit la taille de la fenêtre.
+          this.viewer3d.orbitBy(
+            ((p.x - this.orbitFrom.x) / window.innerWidth) * Math.PI * 2,
+            ((p.y - this.orbitFrom.y) / window.innerHeight) * Math.PI
+          );
+          this.orbitFrom = { x: p.x, y: p.y };
+          this.render3d();
+        } else this.viewport.updatePan(p);
+      },
       onResizeStart: (p) => this.beginResize(p),
       onResizeMove: (p) => this.updateResize(p),
       onResizeEnd: () => this.endResize(),
@@ -400,9 +441,18 @@ export class Atelier {
 
     stage.addEventListener('pointerdown', (event) => {
       const p = toPointer(event);
+      const zone = this.zoneOf(p);
       // On ne confisque jamais un pointeur destiné à l'interface : les boutons
       // et les curseurs doivent continuer de fonctionner normalement.
-      if (this.zoneOf(p) !== 'ui') event.preventDefault();
+      if (zone !== 'ui') event.preventDefault();
+
+      // §10 demande aussi une double tape extérieure pour recentrer. Elle n'est
+      // PAS implémentée : trois montages successifs (fin de rôle, `pointerup` de
+      // fenêtre, `pointerdown` de scène) n'ont jamais déclenché avec des
+      // évènements synthétiques, sans erreur ni trace, et je n'ai pas de tactile
+      // réel pour trancher. Plutôt que de laisser du code qui prétend tenir
+      // l'exigence, il est retiré : le bouton « Vue face » assure le recentrage,
+      // et lui est vérifié.
       this.gestures.pointerDown(p);
     });
 
@@ -436,6 +486,7 @@ export class Atelier {
       this.gestures.cancelAll();
       this.afterGesture();
     });
+
   }
 
   /** Zone touchée — c'est elle qui porte la priorité des gestes de §22. */
@@ -445,6 +496,9 @@ export class Atelier {
       if (target.closest('#resizeHandle')) return 'resize';
       if (target.closest('.dock, .tool, .btn, .ratio-lock, input, select, label, summary')) return 'ui';
     }
+    // En volume, l'œuvre n'est pas une surface d'édition : tout glisser à un
+    // pointeur y tourne la caméra, qu'il parte de l'œuvre ou d'à côté (§10).
+    if (this.view === '3d') return 'outside';
     const rect = this.artWrap.getBoundingClientRect();
     const inside = p.x >= rect.left && p.x <= rect.right && p.y >= rect.top && p.y <= rect.bottom;
     return inside ? 'canvas' : 'outside';
@@ -455,6 +509,9 @@ export class Atelier {
     if (this.gestures.role !== ROLE.NONE) return;
     this.viewport.endPinch();
     this.viewport.endPan();
+    this.orbitFrom = null;
+    this.pinch3d = null;
+    if (this.view === '3d') this.persistCamera();
     if (this.lightMoved) {
       this.lightMoved = false;
       this.render();
@@ -617,6 +674,65 @@ export class Atelier {
     if (button) button.disabled = !this.project.baseDesignSnapshot;
   }
 
+  // ---- Vue 3D (§9, §10) ----
+
+  setView(mode) {
+    if (mode === this.view) return;
+    this.view = mode;
+    const canvas3d = this.root.querySelector('#viewer3d');
+    this.artWrap.dataset.view = mode;
+    this.canvas.hidden = mode === '3d';
+    canvas3d.hidden = mode !== '3d';
+    this.root.querySelector('#view3d').classList.toggle('active', mode === '3d');
+
+    if (mode === '3d') {
+      if (!this.viewer3d) {
+        this.viewer3d = new Viewer3D(canvas3d);
+        this.viewer3d.restore(this.project.camera);
+      }
+      this.refresh3d();
+    }
+    this.scheduleSaveProject();
+  }
+
+  /** Reconstruit le mesh depuis la heightmap courante et redessine. */
+  refresh3d() {
+    if (this.view !== '3d' || !this.viewer3d || !this.hm) return;
+    const rect = this.artWrap.getBoundingClientRect();
+    this.viewer3d.resize(Math.max(1, Math.round(rect.width)), Math.max(1, Math.round(rect.height)));
+    this.viewer3d.setRelief(this.project, this.hm);
+    this.viewer3d.setAppearance(this.project);
+    this.viewer3d.render();
+  }
+
+  render3d() {
+    if (this.view === '3d' && this.viewer3d) this.viewer3d.render();
+  }
+
+  /**
+   * Mémorise la caméra. Appelé à la fin d'un geste MAIS AUSSI après un
+   * recentrage : le bouton « Vue face » et la double tape changeaient la vue
+   * sans jamais l'enregistrer, si bien qu'un rechargement ramenait le cadrage
+   * précédent.
+   */
+  persistCamera() {
+    if (!this.viewer3d) return;
+    this.project.camera = this.viewer3d.serialize();
+    this.scheduleSaveProject();
+  }
+
+  /** Recentrage : double tape extérieure et bouton « Vue face » (§10). */
+  recentreView() {
+    if (this.view === '3d' && this.viewer3d) {
+      this.viewer3d.resetToFront();
+      this.render3d();
+      this.persistCamera();
+    } else {
+      this.viewport.reset();
+      this.render();
+    }
+  }
+
   // ---- Redimensionnement physique de la toile (§3) ----
   //
   // À ne jamais confondre avec le zoom : ici ce sont les CENTIMÈTRES du panneau
@@ -738,10 +854,11 @@ export class Atelier {
       this.miniDock.setVisible(!this.miniDock.state.visible);
     });
 
-    this.root.querySelector('#resetView').addEventListener('click', () => {
-      this.viewport.reset();
-      this.render();
+    this.root.querySelector('#view3d').addEventListener('click', () => {
+      this.setView(this.view === '3d' ? '2d' : '3d');
     });
+
+    this.root.querySelector('#resetView').addEventListener('click', () => this.recentreView());
 
     // La mini-palette n'a pas d'état propre : elle pilote les mêmes réglages
     // que la barre principale, et les deux restent synchronisées.

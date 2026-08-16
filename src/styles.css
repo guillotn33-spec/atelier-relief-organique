@@ -188,6 +188,12 @@ canvas { display: block; width: 100%; height: 100%; }
    inchangée. `--zoom` sert aux commandes qui ne doivent PAS grossir. */
 .art-wrap { transform-origin: 50% 50%; will-change: transform; }
 
+/* Les deux vues occupent la même boîte ; une seule est visible à la fois. */
+#viewer3d { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#viewer3d[hidden] { display: none; }
+.art-wrap[data-view="3d"] { background: transparent; box-shadow: none; }
+.art-wrap[data-view="3d"]::after { display: none; }
+
 /* ---- Poignée de redimensionnement physique (§3) ---- */
 
 .resize-handle, .ratio-lock {

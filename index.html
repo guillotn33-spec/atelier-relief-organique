@@ -247,6 +247,9 @@
           <div class="rendering" id="rendering">Calcul du relief…</div>
           <div class="art-wrap" id="artWrap" data-shape="rectangle">
             <canvas id="reliefCanvas" role="img" aria-label="Aperçu d’un panneau mural abstrait en relief organique"></canvas>
+            <!-- Vue 3D (§9). Même relief que la 2D : le mesh est construit à
+                 partir de la heightmap canonique, pas d'une seconde géométrie. -->
+            <canvas id="viewer3d" hidden aria-label="Vue en volume du panneau"></canvas>
             <!-- Poignée de redimensionnement physique (§3) et verrou de ratio.
                  Les deux s'appliquent l'échelle inverse du zoom : ce sont des
                  commandes, elles ne doivent pas grossir avec l'œuvre. -->
@@ -270,6 +273,7 @@
             <label class="tool-slider">Force <output class="tool-slider-value" id="brushStrengthValue"></output><input type="range" id="brushStrength" min="10" max="100" step="1" value="55"></label>
             <span class="tool-sep" aria-hidden="true"></span>
             <button class="tool" type="button" id="miniToggle" title="Palette rapide"><span class="tool-icon" aria-hidden="true">▤</span>Palette</button>
+            <button class="tool" type="button" id="view3d" title="Voir en volume"><span class="tool-icon" aria-hidden="true">◲</span>Volume</button>
             <button class="tool" type="button" id="resetView" title="Vue face"><span class="tool-icon" aria-hidden="true">⌂</span>Vue face</button>
             <button class="tool" type="button" id="toolbarCollapse" title="Réduire la barre"><span class="tool-icon" aria-hidden="true">–</span>Réduire</button>
           </div>
