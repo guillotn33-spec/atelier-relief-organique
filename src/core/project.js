@@ -289,6 +289,13 @@ export function defaultUi() {
     // distincte de `geometry.variationSeed` : varier une lumière ne doit pas
     // avancer la suite qui explore les compositions.
     effectVariationSeed: 0,
+    // Affichage épuré (« mode Benito ») : tout disparaît sauf l'œuvre, la barre
+    // d'outils et une palette flottante. `paletteXY` est le coin haut-gauche de
+    // cette palette, en pixels depuis le coin de la fenêtre — toujours relu à
+    // travers `contraindre`, jamais appliqué tel quel.
+    benito: false,
+    paletteXY: null,
+    toolbarReplie: false,
 
     // Verrou du rapport largeur/hauteur (§3). Le carré et le rond l'imposent
     // par définition ; ce réglage ne concerne donc que le rectangle.

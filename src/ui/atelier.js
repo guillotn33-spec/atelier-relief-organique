@@ -27,6 +27,8 @@ import { ColorDisc } from './colorDisc.js';
 import { BrushCursor } from './brushCursor.js';
 import { ProWorkspace } from './proWorkspace.js';
 import { EffectPreviews } from './effectPreviews.js';
+import { PromptSheet } from './promptSheet.js';
+import { ModeBenito } from './benito.js';
 
 // Miroir de `.art-wrap { width: min(100%, 1080px) }`. Nommé plutôt que recopié
 // nu : une valeur en pixels perdue dans un calcul se relit comme une marge.
@@ -245,6 +247,18 @@ export class Atelier {
     this.boutique = new EffectPreviews(root, { signal: this.signal });
     this.boutique.monter();
 
+    // Mode Prompt : il ne calcule rien, il lit `compilerPrompt`.
+    this.promptSheet = new PromptSheet(root, { lire: () => this.project, signal: this.signal });
+    // Affichage épuré et sa palette flottante.
+    this.benito = new ModeBenito(root, {
+      lire: () => this.project,
+      onEtat: () => this.scheduleSaveProject(),
+      onPrompt: () => this.promptSheet.ouvrir(),
+      signal: this.signal,
+    });
+    if (this.project.ui.benito) this.benito.activer(true);
+    if (this.project.ui.toolbarReplie) this.replierBarre(true);
+
     // Les barres se placent d'après leur taille MESURÉE, or `bindDocks` a couru
     // avant que `syncControlsFromProject` ne remplisse les valeurs affichées :
     // la barre d'outils était alors plus courte de 13 px qu'elle ne le serait,
@@ -458,6 +472,8 @@ export class Atelier {
     this.refreshBaseButton();
     this.syncMiniPalette();
     this.proWorkspace?.sync();
+    this.benito?.sync();
+    this.promptSheet?.sync();
   }
 
   /**
@@ -516,11 +532,43 @@ export class Atelier {
     this.updateReadouts();
   }
 
+  /**
+   * Replie la barre d'outils sur sa seule poignée.
+   *
+   * Le bouton du lot 7 portait un attribut `hidden` que rien ne levait : il
+   * était donc inatteignable, et la barre ne s'est jamais repliée. Celui-ci est
+   * branché, son état est enregistré, et `aria-expanded` le dit.
+   */
+  replierBarre(force) {
+    const barre = this.root.querySelector('#toolbar');
+    const bouton = this.root.querySelector('#toolbarCollapse');
+    if (!barre) return;
+    const replie = force === undefined ? !barre.classList.contains('toolbar--replie') : !!force;
+    barre.classList.toggle('toolbar--replie', replie);
+    bouton?.setAttribute('aria-expanded', String(!replie));
+    bouton?.setAttribute('title', replie ? 'Déplier la barre d’outils' : 'Replier la barre d’outils');
+    this.project.ui.toolbarReplie = replie;
+    this.scheduleSaveProject();
+    // La scène change de hauteur : l'œuvre doit se recadrer, sans quoi elle
+    // reste dimensionnée pour l'ancienne place.
+    this.fitArtWrap();
+    this.render();
+  }
+
   /** Les trois libellés d'état — graine, nom du design, dimensions. */
   updateReadouts() {
     this.seedLabel.textContent = String(this.project.geometry.seed);
     this.designName.textContent = this.project.ui.designName;
     this.sizeLabel.textContent = `${trim(this.project.widthCm)} × ${trim(this.project.heightCm)} × ${trim(this.project.depthCm)} cm`;
+    // LE PROMPT SUIT LES CURSEURS, ET C'EST TOUT L'INTÉRÊT DU MODE.
+    //
+    // Il ne suivait d'abord que `syncControlsFromProject`, appelée au chargement
+    // et au changement de préréglage — jamais pendant un réglage. Le prompt
+    // restait donc figé sur l'état d'ouverture de la feuille, ce qui est
+    // exactement le contraire de ce qu'on lui demande. Ici, la recompilation
+    // accompagne chaque rendu ; elle sort immédiatement quand la feuille est
+    // fermée, donc elle ne coûte rien le reste du temps.
+    this.promptSheet?.sync();
   }
 
   updateBrushDisplays() {
@@ -1250,6 +1298,11 @@ export class Atelier {
 
     this.ecouter(this.root.querySelector('#newProject'), 'click', () => this.onNewProject());
 
+    this.ecouter(this.root.querySelector('#benitoToggle'), 'click', () => this.benito.basculer());
+    this.ecouter(this.root.querySelector('#benitoExit'), 'click', () => this.benito.activer(false));
+    this.ecouter(this.root.querySelector('#promptToggle'), 'click', () => this.promptSheet.basculer());
+    this.ecouter(this.root.querySelector('#toolbarCollapse'), 'click', () => this.replierBarre());
+
     this.ecouter(this.root.querySelector('#clearSculpt'), 'click', () => {
       this.history.push();
       this.layer.clear();
@@ -1272,7 +1325,7 @@ export class Atelier {
         }
       }
       if (event.ctrlKey || event.metaKey) {
-        const cibles = { e: '#exportRun', r: '#variationTop', n: '#newProject', 0: '#resetView' };
+        const cibles = { e: '#exportRun', r: '#variationTop', n: '#newProject', 0: '#resetView', b: '#benitoToggle', m: '#promptToggle' };
         const selecteur = cibles[event.key.toLowerCase()];
         if (selecteur) {
           const bouton = this.root.querySelector(selecteur);
@@ -1306,7 +1359,13 @@ export class Atelier {
     // Échap ferme le tiroir et rend le focus à son bouton : sans cela, un
     // utilisateur au clavier entrait dans le tiroir sans pouvoir en sortir.
     this.onWindow('keydown', (event) => {
-      if (event.key !== 'Escape' || !sidebar.classList.contains('open')) return;
+      if (event.key !== 'Escape') return;
+      // Ordre de fermeture : ce qui est au-dessus part en premier. Sans cet
+      // ordre, Échap quitterait l'affichage épuré en laissant la feuille de
+      // prompt ouverte au-dessus de rien.
+      if (this.promptSheet?.ouvert) return;
+      if (this.benito?.actif) { this.benito.activer(false); return; }
+      if (!sidebar.classList.contains('open')) return;
       setDrawer(false);
       drawerToggle.focus();
     });
@@ -1421,6 +1480,8 @@ export class Atelier {
     // l'arrêtait ici : un atelier fermé continuait de calculer des vignettes
     // pour un DOM que l'atelier suivant était en train de reprendre.
     this.boutique?.destroy();
+    this.promptSheet?.destroy();
+    this.benito?.destroy();
   }
 }
 

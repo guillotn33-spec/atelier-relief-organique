@@ -32,7 +32,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 // retrait du périmètre 3D : trois d'entre elles gardaient des fonctions absentes
 // du bundle, et un total unique le masquait. Ces suites sont parties avec le
 // code qu'elles éprouvaient.
-const SUITES = ['nonregression', 'engine', 'gestures', 'dimensions', 'brush', 'image', 'shading', 'heightmap', 'effects', 'robustesse'];
+const SUITES = ['nonregression', 'engine', 'gestures', 'dimensions', 'brush', 'image', 'shading', 'heightmap', 'effects', 'robustesse', 'prompt', 'benito'];
 
 const verbose = process.argv.includes('--verbose');
 const resultats = [];
@@ -67,7 +67,7 @@ console.log('──────────────────────�
 console.log(`  ${totalPassees}/${totalVerifs} vérifications sur ${SUITES.length} suites`);
 console.log('');
 console.log('  ⚠ Aucune de ces suites ne touche au DOM. L’interface est éprouvée');
-console.log('    par `npm run fumee` (quinze vérifications, navigateur réel) et');
+console.log('    par `npm run fumee` (trente vérifications, navigateur réel) et');
 console.log('    par `src/empreinte.js`.');
 console.log('');
 

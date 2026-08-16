@@ -203,7 +203,123 @@ for (const id of ['depth', 'softness']) {
 }
 check('E3 — profondeur et douceur rendent une image non vide', (await pixelCentral()) !== '0,0,0,0');
 
-check('F1 — aucune exception ni erreur de console sur tout le parcours', erreurs.length === 0, erreurs.join(' ; '));
+console.log('\nF. Affichage épuré et palette flottante\n');
+
+await page.click('#benitoToggle');
+await page.waitForTimeout(900);
+const cache = (sel) => page.evaluate((s) => { const e = document.querySelector(s); return !e || getComputedStyle(e).display === 'none'; }, sel);
+check(
+  'F1 — tout le mobilier disparaît, la barre d’outils et la scène restent',
+  (await cache('.topbar')) && (await cache('.library-panel')) && (await cache('.inspector-panel')) && (await cache('.bottom-panel'))
+    && !(await cache('#toolbar')) && !(await cache('.stage')),
+);
+check('F2 — la palette flottante est visible', !(await cache('#palette')));
+
+// LA PALETTE RESTE DANS LA FENÊTRE — le défaut qui a fait supprimer dock.js.
+const boite = () => page.evaluate(() => { const r = document.getElementById('palette').getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; });
+const depart = await boite();
+const poignee = await page.locator('[data-palette-grip]').boundingBox();
+await page.mouse.move(poignee.x + poignee.width / 2, poignee.y + poignee.height / 2);
+await page.mouse.down();
+await page.mouse.move(500, 300, { steps: 8 });
+await page.mouse.up();
+await page.waitForTimeout(200);
+const deplacee = await boite();
+check('F3 — la palette se déplace à la poignée', Math.abs(deplacee.x - depart.x) > 20 || Math.abs(deplacee.y - depart.y) > 20, `${Math.round(depart.x)},${Math.round(depart.y)} → ${Math.round(deplacee.x)},${Math.round(deplacee.y)}`);
+
+// On la pousse volontairement hors du cadre, puis on rétrécit la fenêtre.
+await page.mouse.move(poignee.x + 40, poignee.y + 40);
+await page.evaluate(() => { const p = document.getElementById('palette'); p.style.transform = 'translate3d(4000px, 4000px, 0)'; });
+await page.setViewportSize({ width: 700, height: 620 });
+await page.waitForTimeout(500);
+const apresReduction = await boite();
+check(
+  'F4 — après réduction de la fenêtre, la palette reste entièrement visible',
+  apresReduction.x >= 0 && apresReduction.y >= 0 && apresReduction.x + apresReduction.w <= 700 + 1 && apresReduction.y + apresReduction.h <= 620 + 1,
+  `${Math.round(apresReduction.x)},${Math.round(apresReduction.y)} pour ${Math.round(apresReduction.w)}×${Math.round(apresReduction.h)} dans 700×620`
+);
+await page.setViewportSize({ width: 1440, height: 900 });
+await page.waitForTimeout(400);
+
+// La palette pilote bien la brosse de l'atelier, elle n'a pas son propre état.
+await page.evaluate(() => { const e = document.getElementById('paletteSize'); e.value = '40'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+await page.waitForTimeout(300);
+check('F5 — la palette pilote la brosse de l’atelier', (await page.evaluate(() => document.getElementById('brushSize').value)) === '40');
+await page.click('[data-palette-tool="dig"]');
+await page.waitForTimeout(300);
+check('F6 — un outil de la palette change l’outil actif', await page.evaluate(() => document.querySelector('.tool[data-tool="dig"]').classList.contains('active')));
+
+// Repli de la barre : le bouton du lot 7 était inatteignable.
+await page.click('#toolbarCollapse');
+await page.waitForTimeout(400);
+// On mesure la HAUTEUR de la barre, pas le `display` calculé d'un outil : un
+// élément dans un parent masqué garde son propre `display`, si bien que
+// l'assertion précédente échouait alors que le repli fonctionnait.
+check('F7 — la barre d’outils se replie', await page.evaluate(() => {
+  const t = document.getElementById('toolbar');
+  return t.classList.contains('toolbar--replie')
+    && t.getBoundingClientRect().height < 40
+    && document.querySelector('.tool[data-tool="light"]').getBoundingClientRect().height === 0;
+}));
+await page.click('#toolbarCollapse');
+await page.waitForTimeout(400);
+
+await page.keyboard.press('Escape');
+await page.waitForTimeout(500);
+check('F8 — Échap quitte l’affichage épuré', !(await page.evaluate(() => document.getElementById('atelier').classList.contains('benito'))));
+
+console.log('\nG. Mode Prompt\n');
+
+await page.click('#promptToggle');
+await page.waitForTimeout(500);
+const prompt = () => page.evaluate(() => ({
+  ouvert: !document.getElementById('promptSheet').hidden,
+  texte: document.querySelector('[data-prompt-final]').value,
+  cavites: document.querySelector('[data-prompt-cavites]').textContent,
+}));
+const p1 = await prompt();
+check('G1 — la feuille s’ouvre et porte un prompt', p1.ouvert && p1.texte.length > 200, `${p1.texte.length} caractères`);
+check('G2 — le nombre de cavités est annoncé comme estimé', /estimation dérivée/.test(p1.cavites), p1.cavites);
+
+// Le prompt suit les curseurs, en direct.
+await page.evaluate(() => { const e = document.getElementById('depth'); e.value = '25'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+await page.waitForTimeout(700);
+const p2 = await prompt();
+check('G3 — baisser la profondeur change la phrase de relief', p2.texte !== p1.texte && /shallow/.test(p2.texte), p2.texte.match(/It has ([^,]+)/)?.[1] || '');
+
+// Une section retouchée à la main cesse de suivre les curseurs.
+await page.click('[data-niveau="detaille"]');
+await page.waitForTimeout(300);
+await page.fill('[data-section="surface"]', 'Surface écrite à la main.');
+await page.waitForTimeout(300);
+await page.evaluate(() => { const e = document.getElementById('texture'); e.value = '90'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+await page.waitForTimeout(700);
+check(
+  'G4 — une section retouchée n’est pas écrasée par les curseurs',
+  (await page.evaluate(() => document.querySelector('[data-section="surface"]').value)) === 'Surface écrite à la main.'
+    && !(await page.evaluate(() => document.querySelector('[data-section-field="surface"] .prompt-edited').hidden))
+);
+await page.click('[data-prompt-reset]');
+await page.waitForTimeout(400);
+// Le grain à 90 % se dit « coarse, heavily granular texture » : chercher le
+// mot « grain » ne marchait que pour les valeurs basses.
+check('G5 — « rendre la main aux curseurs » restaure la section', /The material is .+(grain|granular|smooth)/.test(await page.evaluate(() => document.querySelector('[data-section="surface"]').value)));
+
+await page.click('[data-niveau="expert"]');
+await page.waitForTimeout(400);
+const expert = await page.evaluate(() => ({
+  negatif: document.querySelector('[data-prompt-negative]').value,
+  json: document.querySelector('[data-prompt-json]').value,
+}));
+let jsonValide = false;
+try { jsonValide = JSON.parse(expert.json).object === 'organic_wall_relief'; } catch (_) { jsonValide = false; }
+check('G6 — le niveau expert donne un JSON valide et un negative prompt', jsonValide && expert.negatif.includes('furniture'));
+
+await page.keyboard.press('Escape');
+await page.waitForTimeout(400);
+check('G7 — Échap ferme la feuille de prompt', await page.evaluate(() => document.getElementById('promptSheet').hidden));
+
+check('H1 — aucune exception ni erreur de console sur tout le parcours', erreurs.length === 0, erreurs.join(' ; '));
 
 await navigateur.close();
 serveur.close();

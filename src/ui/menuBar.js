@@ -23,6 +23,7 @@ const MENUS = [
       { libelle: 'Revenir à la base', cible: '#restoreBase' },
       { separateur: true },
       { libelle: 'Exporter l’image PNG', cible: '#exportRun', raccourci: 'Ctrl E' },
+      { libelle: 'Mode Prompt…', cible: '#promptToggle', raccourci: 'Ctrl M' },
     ],
   },
   {
@@ -40,6 +41,9 @@ const MENUS = [
     libelle: 'Affichage',
     entrees: [
       { libelle: 'Ajuster l’œuvre à la fenêtre', cible: '#resetView', raccourci: 'Ctrl 0' },
+      { separateur: true },
+      { libelle: 'Affichage épuré', cible: '#benitoToggle', raccourci: 'Ctrl B' },
+      { libelle: 'Replier ou déplier la barre d’outils', cible: '#toolbarCollapse' },
       { separateur: true },
       { libelle: 'Afficher ou masquer les propriétés', cible: '#drawerToggle' },
       { libelle: 'Replier ou déplier le panneau du bas', cible: '[data-bottom-collapse]' },
@@ -61,6 +65,8 @@ export const RACCOURCIS = [
   ['Ctrl E', 'Exporter l’image PNG'],
   ['Ctrl R', 'Nouvelle variation'],
   ['Ctrl 0', 'Ajuster l’œuvre à la fenêtre'],
+  ['Ctrl B', 'Affichage épuré'],
+  ['Ctrl M', 'Mode Prompt'],
   ['L O C B S G', 'Lumière, Onduler, Creuser, Bomber, Lisser, Gomme'],
   ['Flèches sur une molette', 'Régler au clavier ; Maj pour un pas fin'],
   ['Flèches sur la poignée', 'Redimensionner le panneau ; Maj par pas de dix'],

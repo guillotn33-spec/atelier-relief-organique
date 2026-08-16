@@ -1253,3 +1253,197 @@ body { background: var(--app-bg); }
 .effect-randomize:hover { background: rgba(255,255,255,.05); color: var(--lime); }
 .effect-enabled { width: 28px; height: 16px; display: block; padding: 2px; border-radius: 9px; background: rgba(202,255,84,.36); }
 .effect-enabled span { width: 12px; height: 12px; display: block; margin-left: auto; border-radius: 50%; background: var(--lime); box-shadow: 0 0 5px rgba(202,255,84,.4); }
+
+/* ========================================================================== */
+/* Affichage épuré (« mode Benito ») et palette flottante                     */
+/* ========================================================================== */
+
+/* Le bouton de repli n'a de sens que là où la barre est le seul mobilier
+   restant : ailleurs, replier une barre au milieu d'une interface complète ne
+   gagne rien et ajoute une commande de plus. */
+#atelier .toolbar-collapse { display: none; }
+#atelier.benito .toolbar-collapse { display: inline-grid; flex: 0 0 auto; }
+
+/* `#atelier .toolbar.dock` porte `min-height: 48px` avec une spécificité de
+   (1,2,0) : une règle de repli en (1,1,0) était battue, la barre se vidait de
+   son contenu mais gardait sa hauteur. Mesuré au navigateur — c'est ce que
+   `tests/fumee.mjs` vérifie maintenant, sur la HAUTEUR et non sur la présence
+   des enfants. */
+#atelier .toolbar.toolbar--replie > *:not(.toolbar-collapse) { display: none; }
+#atelier .toolbar.toolbar--replie { min-height: 28px; padding: 2px 8px; justify-content: flex-start; }
+#atelier .toolbar.toolbar--replie .toolbar-collapse span[aria-hidden] { display: block; transform: rotate(180deg); }
+
+/* TOUT CE QUI N'EST PAS L'ŒUVRE DISPARAÎT.
+   Un seul sélecteur par élément retiré, et rien de masqué « au cas où » : ce
+   qui reste est exactement la barre d'outils, la scène et la palette. */
+#atelier.benito .topbar,
+#atelier.benito .library-panel,
+#atelier.benito .inspector-panel,
+#atelier.benito .bottom-panel,
+#atelier.benito .viewer-titlebar,
+#atelier.benito .stage-footer,
+#atelier.benito .mobile-actions { display: none; }
+
+#atelier.benito .pro-workspace {
+  height: 100vh;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+#atelier.benito .stage-shell { grid-column: 1; grid-row: 1; }
+/* La marge autour de l'œuvre se resserre : en plein écran, la place doit aller
+   à l'œuvre et non à son cadre. */
+#atelier.benito .stage { padding: clamp(12px, 3vh, 40px) clamp(14px, 3vw, 48px); }
+
+.benito-exit {
+  position: fixed;
+  z-index: 46;
+  top: 10px;
+  right: 12px;
+  display: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  background: rgba(24, 25, 23, .86);
+  color: var(--text-3);
+  font: inherit;
+  font-size: 9px;
+  cursor: pointer;
+}
+.benito-exit:hover { border-color: var(--hairline-strong); color: var(--text); }
+#atelier.benito .benito-exit { display: inline-flex; }
+
+/* ---- Palette flottante ---- */
+/* POSITIONNÉE PAR `transform`, JAMAIS PAR `top`/`left`.
+   C'est la correction du défaut qui a fait supprimer `dock.js` au lot 9 : la
+   règle « mouvement réduit » rendait `top` et `left` transitionnables, et
+   Chrome laissait les transitions « running » sans les appliquer — barre écrite
+   à 381 px, rendue à 615 px. Aucune transition n'est déclarée ici, et
+   `transform` ne provoque pas de recalcul de mise en page. */
+.palette {
+  position: fixed;
+  z-index: 45;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px 5px 4px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  background: rgba(24, 25, 23, .93);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, .5);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.palette--glisse { opacity: .94; }
+.palette-grip {
+  flex: 0 0 auto;
+  width: 22px;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  font-size: 13px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.palette-grip:active { cursor: grabbing; color: var(--lime); }
+.palette-tools { display: flex; gap: 2px; }
+.palette .tool {
+  min-width: 54px;
+  display: grid;
+  place-items: center;
+  gap: 1px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 8px;
+  cursor: pointer;
+}
+.palette .tool .tool-icon { font-size: 14px; }
+.palette .tool:hover { background: rgba(255,255,255,.05); color: var(--text-2); }
+.palette .tool.active { border-color: rgba(202,255,84,.35); background: var(--lime-soft); color: var(--lime); }
+.palette .tool-slider { min-height: 40px; padding: 0 4px; font-size: 8px; }
+.palette .tool-slider input[type="range"] { width: 84px; height: 34px; }
+.palette-prompt { margin-left: 4px; }
+
+/* ========================================================================== */
+/* Mode Prompt                                                                */
+/* ========================================================================== */
+
+.prompt-sheet {
+  position: fixed;
+  z-index: 48;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  max-height: min(78vh, 760px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  border-top: 1px solid var(--hairline-strong);
+  border-radius: 14px 14px 0 0;
+  background: var(--chrome);
+  box-shadow: 0 -18px 50px rgba(0, 0, 0, .55);
+}
+.prompt-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--hairline);
+}
+.prompt-head h2 { margin: 0; color: var(--text); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.prompt-levels { display: flex; gap: 2px; margin-left: auto; }
+.prompt-level {
+  min-height: 26px;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 9px;
+  cursor: pointer;
+}
+.prompt-level:hover { color: var(--text-2); }
+.prompt-level.active { border-color: rgba(202,255,84,.35); background: var(--lime-soft); color: var(--lime); }
+
+.prompt-body { overflow-y: auto; padding: 12px; display: grid; gap: 11px; align-content: start; }
+.prompt-pane { display: grid; gap: 11px; }
+.prompt-field { display: grid; gap: 4px; }
+.prompt-field > span { color: var(--text-3); font-size: 8px; letter-spacing: .06em; text-transform: uppercase; }
+.prompt-field > span em { font-style: normal; text-transform: none; letter-spacing: 0; }
+.prompt-edited { color: var(--lime); }
+.prompt-text {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: #131412;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.55;
+  resize: vertical;
+}
+.prompt-text:focus-visible { border-color: rgba(202,255,84,.4); outline: none; }
+.prompt-text[readonly] { color: var(--text-3); }
+.prompt-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; line-height: 1.5; }
+.prompt-note { margin: 0; color: var(--text-3); font-size: 9px; }
+.prompt-fidelity { max-width: 320px; }
+
+.prompt-foot { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-top: 1px solid var(--hairline); }
+.prompt-status { flex: 1 1 auto; color: var(--lime); font-size: 9px; }
+
+@media (max-width: 700px) {
+  .prompt-sheet { max-height: 88vh; }
+  .palette { flex-wrap: wrap; max-width: calc(100vw - 24px); }
+}

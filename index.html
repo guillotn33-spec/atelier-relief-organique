@@ -43,6 +43,8 @@
       </nav>
       <div class="top-actions">
         <button class="icon-btn drawer-toggle" id="drawerToggle" type="button" aria-expanded="false" aria-controls="sidebar" title="Afficher les propriétés"><span aria-hidden="true">☷</span><span class="sr-only">Propriétés</span></button>
+        <button class="btn btn-quiet" id="benitoToggle" type="button" aria-pressed="false" title="Affichage épuré, plein écran"><span aria-hidden="true">⛶</span> <span class="btn-label">Épuré</span></button>
+        <button class="btn btn-quiet" id="promptToggle" type="button" aria-pressed="false" title="Construire le prompt du projet"><span aria-hidden="true">✎</span> <span class="btn-label">Prompt</span></button>
         <button class="btn btn-quiet" id="newProject" type="button"><span aria-hidden="true">＋</span> Nouveau</button>
         <button class="btn btn-quiet variation-top" id="variationTop" type="button"><span aria-hidden="true">↻</span> Variation</button>
         <button class="btn btn-primary" id="exportTop" type="button"><span aria-hidden="true">⇩</span> <span class="btn-label">Exporter PNG</span></button>
@@ -147,6 +149,7 @@
         </div>
 
         <div class="toolbar dock" id="toolbar" role="group" aria-label="Outils de sculpture">
+          <button class="icon-btn toolbar-collapse" id="toolbarCollapse" type="button" aria-expanded="true" aria-controls="toolbar" title="Replier la barre d’outils"><span aria-hidden="true">⌃</span><span class="sr-only">Replier ou déplier la barre d’outils</span></button>
           <div class="tool-group" aria-label="Outils">
             <button class="tool active" type="button" data-tool="light"><span class="tool-icon" aria-hidden="true">☀</span><span>Lumière</span></button>
             <button class="tool" type="button" data-tool="warp"><span class="tool-icon" aria-hidden="true">〰</span><span>Onduler</span></button>
@@ -313,6 +316,7 @@
         </div>
       </section>
 
+      <button class="benito-exit" id="benitoExit" type="button" title="Quitter l’affichage épuré (Échap)"><span aria-hidden="true">✕</span> Quitter l’affichage épuré</button>
     </div>
   </main>
   <script type="module" src="app.js"></script>
