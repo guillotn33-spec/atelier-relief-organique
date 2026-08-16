@@ -223,6 +223,76 @@ export function buildHeightmap(project, layer, options = {}) {
   return hm;
 }
 
+// ---- Retouches sans réévaluation du champ ----
+//
+// TROIS CURSEURS RECONSTRUISAIENT TOUT POUR RIEN.
+//
+// `negative`, `softness` et `depth` étaient classés `scope: 'geometry'` dans
+// `bindings.js`, donc chaque cran relançait une construction complète — 106 à
+// 145 ms par 250 000 cellules, l'essentiel passé à évaluer huit champs de bruit
+// par cellule. Or aucun des trois ne change le champ :
+//
+//   • `negative` est une NÉGATION de la sortie (`field.js`, dernière ligne) ;
+//   • `softness` n'apparaît nulle part dans `field.js` — zéro occurrence. Il ne
+//     pilote que le rayon du flou d'adoucissement, appliqué ICI ;
+//   • la hauteur est AFFINE en `depth` : en développant `evalField`, on obtient
+//     h = depth · (houle·extinction·porteuse − creusement) + sculpture, où
+//     aucun des trois facteurs ne dépend de `depth`.
+//
+// Les trois fonctions ci-dessous retouchent le tampon EXISTANT. Le flou étant
+// linéaire et le champ d'occlusion n'étant qu'un flou de grand rayon, les
+// identités tiennent exactement : flou(−h) = −flou(h), flou(k·h) = k·flou(h).
+//
+// La contrepartie est explicite : `scaleHeightmapDepth` exige un tampon SANS
+// sculpture, parce que la sculpture s'ajoute APRÈS le facteur de profondeur et
+// ne doit donc pas être mise à l'échelle avec lui. `Atelier` retombe sur une
+// reconstruction complète dans ce cas — c'est `peutRetoucher` qui tranche.
+
+/** Retourne le relief. Exact : la négation traverse flou et occlusion. */
+export function negateHeightmap(hm) {
+  const { h, raw, ao } = hm;
+  for (let i = 0; i < h.length; i++) h[i] = -h[i];
+  for (let i = 0; i < raw.length; i++) raw[i] = -raw[i];
+  if (ao) { const d = ao.data; for (let i = 0; i < d.length; i++) d[i] = -d[i]; }
+  const min = hm.min;
+  hm.min = -hm.max;
+  hm.max = -min;
+  hm.sum = -hm.sum;
+  hm.ctx.negative = !hm.ctx.negative;
+  return hm;
+}
+
+/**
+ * Met le relief à l'échelle d'une nouvelle profondeur.
+ * `ancienne` doit être la profondeur avec laquelle le tampon a été construit.
+ */
+export function scaleHeightmapDepth(hm, ancienne, nouvelle) {
+  if (!(ancienne > 0) || !(nouvelle > 0) || ancienne === nouvelle) return hm;
+  const k = nouvelle / ancienne;
+  const { h, raw, ao } = hm;
+  for (let i = 0; i < h.length; i++) h[i] *= k;
+  for (let i = 0; i < raw.length; i++) raw[i] *= k;
+  if (ao) { const d = ao.data; for (let i = 0; i < d.length; i++) d[i] *= k; }
+  hm.min *= k;
+  hm.max *= k;
+  hm.sum *= k;
+  hm.ctx.depth = nouvelle;
+  hm.ctx.swellAmp *= k;
+  return hm;
+}
+
+/**
+ * Refait l'adoucissement depuis le champ brut, avec un nouveau rayon.
+ * Le champ n'est PAS réévalué : `raw` est déjà là, c'est tout l'intérêt.
+ */
+export function resoftenHeightmap(hm, project, grid = hm) {
+  hm.blurRadius = blurRadiusCells(project, grid);
+  blurTile(hm.raw, hm.h, hm.cols, hm.rows, hm.blurRadius);
+  recomputeStats(hm);
+  hm.ao = buildAoField(hm, hm.aoRadius || aoRadiusCells(project, grid));
+  return hm;
+}
+
 /**
  * Met à jour la heightmap sur un rectangle en cm (trait de sculpture en cours).
  * Retourne le rectangle de cellules réellement réécrit, ou null.

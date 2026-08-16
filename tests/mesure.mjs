@@ -10,16 +10,21 @@
 // la première construction paie la compilation JIT et fausserait la comparaison.
 
 import { createProject, PRESETS, applyPreset } from '../src/core/project.js';
-import { buildHeightmap, gridFor } from '../src/geometry/heightmap.js';
+import { buildHeightmap, gridFor, negateHeightmap, resoftenHeightmap, scaleHeightmapDepth } from '../src/geometry/heightmap.js';
 import { shadeParams, shadeRegion } from '../src/render2d/shade.js';
 import { resampleTo } from '../src/geometry/heightmap.js';
 
 const PANNEAU = { canvasShape: 'rectangle', widthCm: 200, heightCm: 120, depthCm: 6 };
-const PASSES = 5;
+const PASSES = 9;
 
-function mediane(valeurs) {
-  const t = [...valeurs].sort((a, b) => a - b);
-  return t[Math.floor(t.length / 2)];
+// LE MINIMUM, PAS LA MÉDIANE.
+//
+// Le bruit de mesure d'une machine partagée est à SENS UNIQUE : une passe peut
+// être ralentie par un autre processus, jamais accélérée. La médiane le laisse
+// donc passer — deux exécutions du même code ont donné 133 puis 144 ms — alors
+// que le minimum est l'estimateur le moins biaisé du coût réel du code.
+function minimum(valeurs) {
+  return Math.min(...valeurs);
 }
 
 function chronometrer(fn, passes = PASSES) {
@@ -30,7 +35,7 @@ function chronometrer(fn, passes = PASSES) {
     fn();
     temps.push(performance.now() - t0);
   }
-  return mediane(temps);
+  return minimum(temps);
 }
 
 const projets = {};
@@ -49,6 +54,20 @@ for (const [famille, preset] of Object.entries(familles)) {
   const project = projets[preset];
   resultats[`construction:${famille}`] = chronometrer(() => buildHeightmap(project, null, {}));
   resultats[`construction:${famille}@0.5`] = chronometrer(() => buildHeightmap(project, null, { quality: 0.5 }));
+}
+
+// Retouches sans réévaluation du champ — ce que coûtent désormais les trois
+// curseurs qui reconstruisaient tout (`negative`, `depth`, `softness`).
+{
+  const project = projets.dunes;
+  const carte = buildHeightmap(project, null, {});
+  resultats['retouche:negative'] = chronometrer(() => negateHeightmap(carte));
+  let sens = 1;
+  resultats['retouche:depth'] = chronometrer(() => {
+    scaleHeightmapDepth(carte, sens === 1 ? 0.92 : 0.41, sens === 1 ? 0.41 : 0.92);
+    sens = -sens;
+  });
+  resultats['retouche:softness'] = chronometrer(() => resoftenHeightmap(carte, project));
 }
 
 // Ombrage : coût d'un réombrage seul, celui que paie chaque cran d'un curseur

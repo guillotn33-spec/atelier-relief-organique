@@ -17,6 +17,23 @@ export const TOOL_META = {
 
 // `scope` décide de ce qu'il faut refaire : 'size' redimensionne la toile,
 // 'geometry' reconstruit la heightmap, 'shading' se contente de réombrer.
+//
+// QUATRIÈME PORTÉE : 'postprocess'.
+//
+// Trois réglages étaient classés 'geometry' alors qu'aucun ne change le champ.
+// Ils retouchent la carte DÉJÀ CONSTRUITE — voir `negateHeightmap`,
+// `scaleHeightmapDepth` et `resoftenHeightmap` dans `heightmap.js`. La
+// reconstruction complète coûte 106 à 145 ms par 250 000 cellules ; la retouche
+// coûte deux ou trois passes linéaires sur le tampon.
+//
+//   negative → une négation. `field.js` finit par `return ctx.negative ? -h : h`.
+//   softness → `field.js` ne le lit JAMAIS : il ne règle que le rayon du flou.
+//   depth    → la hauteur est affine en profondeur, donc une mise à l'échelle.
+//
+// `retouche` nomme laquelle. Le repli sur une reconstruction complète reste
+// possible et documenté dans `applyChange` : la mise à l'échelle par la
+// profondeur n'est exacte que sans sculpture, puisque la sculpture s'ajoute
+// après le facteur de profondeur.
 export const BINDINGS = {
   widthCm: { scope: 'size', read: (p) => p.widthCm, write: (p, v) => { p.widthCm = v; }, format: (v) => `${v} cm` },
   heightCm: { scope: 'size', read: (p) => p.heightCm, write: (p, v) => { p.heightCm = v; }, format: (v) => `${v} cm` },
@@ -29,11 +46,11 @@ export const BINDINGS = {
   orientationDeg: { scope: 'geometry', read: (p) => Math.round(p.geometry.orientationDeg), write: (p, v) => { p.geometry.orientationDeg = v; }, format: (v) => `${v}°` },
   warpAmount: { scope: 'geometry', read: (p) => Math.round(p.geometry.warpAmount * 100), write: (p, v) => { p.geometry.warpAmount = v / 100; }, format: (v) => `${v} %` },
   irregularity: { scope: 'geometry', read: (p) => Math.round(p.geometry.irregularity * 100), write: (p, v) => { p.geometry.irregularity = v / 100; }, format: (v) => `${v} %` },
-  depth: { scope: 'geometry', read: (p) => Math.round(p.geometry.depth * 100), write: (p, v) => { p.geometry.depth = v / 100; }, format: (v) => `${v} %` },
+  depth: { scope: 'postprocess', retouche: 'depth', read: (p) => Math.round(p.geometry.depth * 100), write: (p, v) => { p.geometry.depth = v / 100; }, format: (v) => `${v} %` },
   shoulder: { scope: 'geometry', read: (p) => Math.round(p.geometry.shoulder * 100), write: (p, v) => { p.geometry.shoulder = v / 100; }, format: (v) => `${v} %` },
-  softness: { scope: 'geometry', read: (p) => Math.round(p.geometry.softness * 100), write: (p, v) => { p.geometry.softness = v / 100; }, format: (v) => `${v} %` },
+  softness: { scope: 'postprocess', retouche: 'softness', read: (p) => Math.round(p.geometry.softness * 100), write: (p, v) => { p.geometry.softness = v / 100; }, format: (v) => `${v} %` },
   wave: { scope: 'geometry', read: (p) => Math.round(p.geometry.wave * 100), write: (p, v) => { p.geometry.wave = v / 100; }, format: (v) => `${v} %` },
-  negative: { scope: 'geometry', kind: 'checkbox', read: (p) => p.geometry.negative, write: (p, v) => { p.geometry.negative = v; } },
+  negative: { scope: 'postprocess', retouche: 'negative', kind: 'checkbox', read: (p) => p.geometry.negative, write: (p, v) => { p.geometry.negative = v; } },
 
   texture: { scope: 'shading', read: (p) => Math.round(p.material.texture * 100), write: (p, v) => { p.material.texture = v / 100; }, format: (v) => `${v} %` },
   materialColor: { scope: 'shading', kind: 'color', read: (p) => p.material.color, write: (p, v) => { p.material.color = v; } },

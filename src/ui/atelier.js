@@ -12,7 +12,7 @@ import { EFFECTS, applyEffect, varyEffect } from '../core/effects.js';
 import { GestureManager, ROLE } from './gestures.js';
 import { Viewport } from './viewport.js';
 import { nextVariation } from '../geometry/variation.js';
-import { buildHeightmap, updateHeightmapRect } from '../geometry/heightmap.js';
+import { buildHeightmap, negateHeightmap, resoftenHeightmap, scaleHeightmapDepth, updateHeightmapRect } from '../geometry/heightmap.js';
 import { createRenderCache, renderFull, renderPatch } from '../render2d/renderer.js';
 import { brushAxes, stamp } from '../sculpt/brush.js';
 import { DirectionTracker } from '../sculpt/direction.js';
@@ -339,35 +339,97 @@ export class Atelier {
    * c'est la garantie que donne `buildHeightmap(…, { quality })`, et c'est déjà
    * ce que fait l'aperçu de redimensionnement.
    */
-  rebuildInteractif() {
+  rebuildInteractif(quality = 0.5) {
     clearTimeout(this.finGeste);
-    this.rebuild({ quality: 0.5 });
+    this.rebuild({ quality });
     // 220 ms sans nouvel évènement : le curseur est relâché ou la main s'est
     // arrêtée. On repasse alors à la grille complète.
     this.finGeste = setTimeout(() => this.rebuild(), 220);
   }
 
+  /**
+   * Rend au plus une fois par image.
+   *
+   * `applyChange` appelait `render()` DIRECTEMENT dans le gestionnaire `input`,
+   * en pleine résolution et sans coalescence — pour les douze liaisons de
+   * portée `shading`, soit tous les curseurs de lumière et de matière. Un
+   * curseur au stylet émet bien plus d'évènements que l'écran n'affiche
+   * d'images : la file se remplissait plus vite qu'elle ne se vidait.
+   *
+   * À comparer avec `moveLight`, qui pour le MÊME paramètre — l'angle de la
+   * lumière — se limitait depuis toujours à une image et rendait en demi-
+   * résolution. Les deux chemins font maintenant la même chose.
+   */
+  renderCoalesce() {
+    if (this.renderQueued) return;
+    this.renderQueued = true;
+    const planifier = document.hidden ? (fn) => setTimeout(fn, 0) : requestAnimationFrame;
+    planifier(() => {
+      this.renderQueued = false;
+      if (this.detruit) return;
+      this.render();
+    });
+  }
+
   applyChange(id, binding, raw) {
+    const profondeurAvant = this.project.geometry.depth;
     binding.write(this.project, raw);
     this.markCustom();
 
-    if (binding.scope === 'size') {
+    if (binding.scope === 'postprocess' && this.retoucher(binding.retouche, profondeurAvant)) {
+      this.renderCoalesce();
+    } else if (binding.scope === 'postprocess') {
+      // La retouche a refusé — voir `retoucher`. On reconstruit comme avant.
+      this.rebuildInteractif();
+    } else if (binding.scope === 'size') {
       if (this.project.canvasShape !== 'rectangle') {
         this.project.heightCm = this.project.widthCm;
         if (this.controls.heightCm) this.controls.heightCm.value = String(this.project.heightCm);
       }
       this.layer.ensureCovers(this.project.widthCm, this.project.heightCm);
       this.applyShapeToDom();
-      this.rebuild();
+      // MÊME GESTE, MÊME QUALITÉ. Tirer la poignée de redimensionnement
+      // reconstruisait à 0,35 ; glisser le curseur « Largeur », qui fait
+      // exactement le même changement, reconstruisait en pleine qualité — huit
+      // fois plus de cellules par image, pour le même résultat transitoire.
+      this.rebuildInteractif(0.35);
     } else if (binding.scope === 'geometry') {
       this.rebuildInteractif();
     } else {
       this.updateEnvironment();
-      this.render();
+      this.renderCoalesce();
     }
 
     this.updateControlDisplays();
     this.scheduleSaveProject();
+  }
+
+  /**
+   * Retouche la heightmap en place plutôt que de la reconstruire.
+   * Rend `true` si la retouche a été faite, `false` s'il faut tout refaire.
+   *
+   * TROIS RÉGLAGES SUR QUATORZE NE TOUCHENT PAS AU CHAMP. Le détail est dans
+   * `bindings.js` ; ici ne reste que la décision, et une seule condition de
+   * repli : mettre le relief à l'échelle de la profondeur n'est exact que si
+   * aucune sculpture n'est posée, la sculpture s'ajoutant APRÈS le facteur de
+   * profondeur. Dans ce cas seulement, on reconstruit.
+   */
+  retoucher(quoi, profondeurAvant) {
+    if (!this.hm) return false;
+    if (quoi === 'negative') {
+      negateHeightmap(this.hm);
+      return true;
+    }
+    if (quoi === 'softness') {
+      resoftenHeightmap(this.hm, this.project);
+      return true;
+    }
+    if (quoi === 'depth') {
+      if (this.layer?.active) return false;
+      scaleHeightmapDepth(this.hm, profondeurAvant, this.project.geometry.depth);
+      return true;
+    }
+    return false;
   }
 
   syncControlsFromProject() {
@@ -425,11 +487,24 @@ export class Atelier {
     );
   }
 
+  /**
+   * Rafraîchit les valeurs affichées de toutes les commandes.
+   *
+   * VINGT-QUATRE `querySelector` PAR APPEL, ET IL ÉTAIT APPELÉ À CHAQUE
+   * `pointermove`. `moveLight` l'invoque à chaque déplacement du pointeur sur
+   * l'œuvre — hors du garde qui limite le RENDU à une image, si bien que le
+   * calcul le plus lourd était throttlé et pas la mise à jour de l'affichage.
+   * Les sorties sont maintenant retrouvées une seule fois, à la construction.
+   */
   updateControlDisplays() {
+    if (!this.sorties) {
+      this.sorties = {};
+      for (const id of Object.keys(BINDINGS)) this.sorties[id] = this.root.querySelector('#' + id + 'Value');
+    }
     for (const [id, binding] of Object.entries(BINDINGS)) {
       const el = this.controls[id];
-      const output = this.root.querySelector('#' + id + 'Value');
       if (!el) continue;
+      const output = this.sorties[id];
       if (output && binding.format) output.value = binding.format(el.value);
       if (el.type === 'range') {
         const min = Number(el.min);
@@ -438,6 +513,11 @@ export class Atelier {
         el.style.setProperty('--range', (((value - min) / (max - min)) * 100).toFixed(2) + '%');
       }
     }
+    this.updateReadouts();
+  }
+
+  /** Les trois libellés d'état — graine, nom du design, dimensions. */
+  updateReadouts() {
     this.seedLabel.textContent = String(this.project.geometry.seed);
     this.designName.textContent = this.project.ui.designName;
     this.sizeLabel.textContent = `${trim(this.project.widthCm)} × ${trim(this.project.heightCm)} × ${trim(this.project.depthCm)} cm`;
@@ -632,7 +712,10 @@ export class Atelier {
     const { outW, outH } = this.outputSize();
     this.updateEnvironment();
     renderFull(this.canvas, this.project, this.hm, outW, outH, this.cache);
-    this.updateControlDisplays();
+    // `updateReadouts` et non `updateControlDisplays` : rendre l'image n'a
+    // aucune raison de relire et de réécrire les vingt-quatre curseurs. Seuls
+    // les trois libellés d'état peuvent avoir changé.
+    this.updateReadouts();
   }
 
   renderLowPreview() {
@@ -941,11 +1024,16 @@ export class Atelier {
     this.project.lighting.angle = Math.round(angle);
     if (this.controls.lightAngle) this.controls.lightAngle.value = String(this.project.lighting.angle);
     this.markCustom();
-    this.updateControlDisplays();
     this.lightMoved = true;
     if (!this.lightBusy) {
       this.lightBusy = true;
       requestAnimationFrame(() => {
+        // L'AFFICHAGE DES COMMANDES ENTRE DANS LE GARDE.
+        //
+        // Il était appelé à chaque `pointermove`, donc bien plus souvent que le
+        // rendu qu'il accompagne : le calcul lourd était limité à une image, la
+        // mise à jour de l'interface ne l'était pas.
+        this.updateControlDisplays();
         this.renderLowPreview();
         this.lightBusy = false;
       });
@@ -1319,6 +1407,7 @@ export class Atelier {
     // affichait le relief de l'ancien — deux images stables et différentes pour
     // un même projet, selon qu'un rendu fantôme était encore en vol.
     this.renderToken++;
+    this.detruit = true;
     // Le report de 120 ms de l'observateur de taille n'était jamais annulé :
     // redimensionner la fenêtre puis ouvrir un autre projet dans l'intervalle
     // faisait rendre l'ancien atelier sur le canvas du nouveau.

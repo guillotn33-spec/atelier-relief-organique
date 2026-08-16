@@ -9,7 +9,7 @@
 
 import { createProject, defaultGeometry, validateGeometry, GEOMETRY_BOUNDS, GEOMETRY_LIMITS } from '../src/core/project.js';
 import { nextVariation } from '../src/geometry/variation.js';
-import { buildHeightmap } from '../src/geometry/heightmap.js';
+import { buildHeightmap, negateHeightmap, resoftenHeightmap, scaleHeightmapDepth } from '../src/geometry/heightmap.js';
 
 const results = [];
 function check(label, ok, detail) {
@@ -124,6 +124,70 @@ check('B4 — trois cents variations restent dans les bornes admissibles', franc
 const varieeDepuisNaN = nextVariation({ ...defaultGeometry(), density: NaN, elongation: NaN });
 const finiApresNaN = Object.entries(varieeDepuisNaN).every(([, v]) => typeof v !== 'number' || Number.isFinite(v));
 check('B5 — varier une géométrie corrompue rend des nombres finis', finiApresNaN, `densité ${varieeDepuisNaN.density}, allongement ${varieeDepuisNaN.elongation}`);
+
+
+console.log('\nC. Les retouches valent une reconstruction\n');
+
+// TROIS CURSEURS NE RECONSTRUISENT PLUS RIEN. Encore faut-il que la retouche
+// donne EXACTEMENT ce que la reconstruction aurait donné — sinon on a échangé
+// 130 ms contre un relief différent. C'est ce que ces trois mesures exigent :
+// l'écart est rapporté à l'amplitude du relief, et doit rester au niveau du
+// bruit d'arrondi des flottants.
+function panneau(mod) {
+  const project = createProject({ canvasShape: 'rectangle', widthCm: 200, heightCm: 120, depthCm: 6 });
+  Object.assign(project.geometry, defaultGeometry());
+  if (mod) mod(project.geometry);
+  return project;
+}
+
+function ecartRelatif(a, b) {
+  const amplitude = Math.max(b.max - b.min, 1e-9);
+  let pire = 0;
+  for (let i = 0; i < a.h.length; i++) pire = Math.max(pire, Math.abs(a.h[i] - b.h[i]));
+  return pire / amplitude;
+}
+
+// C1 — le mode négatif.
+const positif = buildHeightmap(panneau(), null, { quality: 0.5 });
+const negatifAttendu = buildHeightmap(panneau((g) => { g.negative = true; }), null, { quality: 0.5 });
+negateHeightmap(positif);
+const e1 = ecartRelatif(positif, negatifAttendu);
+check('C1 — retourner le relief vaut une reconstruction en négatif', e1 < 1e-6, `écart maximal ${(e1 * 100).toExponential(2)} % de l’amplitude`);
+check('C1b — les bornes suivent le retournement', Math.abs(positif.min - negatifAttendu.min) < 1e-6 && Math.abs(positif.max - negatifAttendu.max) < 1e-6, `min ${positif.min.toFixed(4)} vs ${negatifAttendu.min.toFixed(4)}`);
+
+// C2 — la profondeur, sans sculpture. La hauteur est affine en profondeur :
+// h = depth · (houle·extinction·porteuse − creusement) + sculpture.
+const misAEchelle = buildHeightmap(panneau((g) => { g.depth = 0.92; }), null, { quality: 0.5 });
+const depthAttendu = buildHeightmap(panneau((g) => { g.depth = 0.41; }), null, { quality: 0.5 });
+scaleHeightmapDepth(misAEchelle, 0.92, 0.41);
+const e2 = ecartRelatif(misAEchelle, depthAttendu);
+check('C2 — mettre la profondeur à l’échelle vaut une reconstruction', e2 < 1e-6, `0,92 → 0,41, écart maximal ${(e2 * 100).toExponential(2)} % de l’amplitude`);
+
+// L'occlusion aussi : c'est elle qui règle la profondeur du noir, et la fausser
+// ne se verrait pas sur les hauteurs mais sur l'image.
+let ecartAo = 0;
+for (let i = 0; i < misAEchelle.ao.data.length; i++) ecartAo = Math.max(ecartAo, Math.abs(misAEchelle.ao.data[i] - depthAttendu.ao.data[i]));
+check('C2b — le champ d’occlusion suit la mise à l’échelle', ecartAo / Math.max(depthAttendu.max - depthAttendu.min, 1e-9) < 1e-6, `écart maximal ${ecartAo.toExponential(2)}`);
+
+// C3 — l'adoucissement. `softness` n'apparaît nulle part dans `field.js` : il ne
+// règle que le rayon du flou, donc refaire le flou depuis `raw` suffit.
+const projetDoux = panneau((g) => { g.softness = 0.20; });
+const adouci = buildHeightmap(projetDoux, null, { quality: 0.5 });
+projetDoux.geometry.softness = 0.85;
+const douxAttendu = buildHeightmap(projetDoux, null, { quality: 0.5 });
+resoftenHeightmap(adouci, projetDoux);
+const e3 = ecartRelatif(adouci, douxAttendu);
+check('C3 — refaire l’adoucissement vaut une reconstruction', e3 < 1e-6, `0,20 → 0,85, écart maximal ${(e3 * 100).toExponential(2)} % de l’amplitude`);
+
+// C4 — le gain. On ne mesure pas un temps absolu (il dépend de la machine) mais
+// un RAPPORT, qui, lui, est une propriété du code.
+const projetMesure = panneau();
+const chrono = (fn) => { fn(); let m = Infinity; for (let i = 0; i < 5; i++) { const t = performance.now(); fn(); m = Math.min(m, performance.now() - t); } return m; };
+const coutReconstruction = chrono(() => buildHeightmap(projetMesure, null, {}));
+const carte = buildHeightmap(projetMesure, null, {});
+const coutRetouche = chrono(() => { negateHeightmap(carte); });
+const rapport = coutReconstruction / Math.max(coutRetouche, 1e-6);
+check('C4 — retourner le relief est au moins vingt fois moins cher que reconstruire', rapport > 20, `${coutReconstruction.toFixed(1)} ms contre ${coutRetouche.toFixed(2)} ms, soit ${rapport.toFixed(0)}×`);
 
 const passed = results.filter((r) => r.ok).length;
 console.log(`\n${passed}/${results.length} vérifications passées\n`);

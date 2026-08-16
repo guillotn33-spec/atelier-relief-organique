@@ -52,11 +52,21 @@ function smoothstep01(t) {
   return t * t * (3 - 2 * t);
 }
 
+// Réciproque de 2³² − 1, pour remplacer une division par une multiplication.
+//
+// Le compilateur ne peut pas faire la substitution lui-même : le résultat n'est
+// pas bit-identique, donc la transformation lui est interdite. À nous de la
+// décider. Cette ligne s'exécute vingt-sept fois par cellule en famille
+// Cellules — cinq millions et demi de divisions flottantes par reconstruction
+// sur un panneau de 200 × 120 cm. L'écart introduit est de l'ordre de 10⁻¹⁶ sur
+// une valeur qui sert de gigue de position : il n'a aucune traduction visible.
+const INV_U32 = 1 / 4294967295;
+
 /** Hash déterministe local, dans [0, 1]. */
 function hash01(ix, iy, seed) {
   let h = Math.imul(ix | 0, 374761393) ^ Math.imul(iy | 0, 668265263) ^ Math.imul(seed | 0, 1274126177);
   h = Math.imul(h ^ (h >>> 13), 1274126177);
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+  return ((h ^ (h >>> 16)) >>> 0) * INV_U32;
 }
 
 /**
@@ -68,12 +78,10 @@ function hash01(ix, iy, seed) {
  * fond ne peut pas contenir d’îlot central — la profondeur croît toujours en
  * allant vers le centre de la cavité.
  */
-function cellularSignal(x, y, seed, density, irregularity, fusion = 0) {
+function cellularSignal(x, y, seed, jitter, baseRadius, fusion = 0) {
   const ix = Math.floor(x);
   const iy = Math.floor(y);
   let best = -Infinity;
-  const jitter = 0.30 + irregularity * 0.62;
-  const baseRadius = 0.24 + density * 0.33;
 
   for (let gy = iy - 1; gy <= iy + 1; gy++) {
     for (let gx = ix - 1; gx <= ix + 1; gx++) {
@@ -109,11 +117,10 @@ function cellularSignal(x, y, seed, density, irregularity, fusion = 0) {
  * seconde famille « Cellules » alors que l'intention est un paysage ouvert,
  * ponctué seulement de deux ou trois lagunes à l'échelle d'un panneau.
  */
-function sparseEllipticSignal(x, y, seed, density, irregularity) {
+function sparseEllipticSignal(x, y, seed, keep, jitter) {
   const ix = Math.floor(x);
   const iy = Math.floor(y);
   let best = -Infinity;
-  const keep = 0.18 + density * 0.24;
 
   // BALAYAGE 3 × 3, ET NON 5 × 5.
   //
@@ -125,8 +132,8 @@ function sparseEllipticSignal(x, y, seed, density, irregularity) {
   for (let gy = iy - 1; gy <= iy + 1; gy++) {
     for (let gx = ix - 1; gx <= ix + 1; gx++) {
       if (hash01(gx, gy, seed + 11) > keep) continue;
-      const ox = 0.5 + (hash01(gx, gy, seed + 37) - 0.5) * (0.46 + irregularity * 0.40);
-      const oy = 0.5 + (hash01(gx, gy, seed + 73) - 0.5) * (0.46 + irregularity * 0.40);
+      const ox = 0.5 + (hash01(gx, gy, seed + 37) - 0.5) * jitter;
+      const oy = 0.5 + (hash01(gx, gy, seed + 73) - 0.5) * jitter;
       const angle = hash01(gx, gy, seed + 109) * Math.PI;
       const ca = Math.cos(angle);
       const sa = Math.sin(angle);
@@ -135,9 +142,11 @@ function sparseEllipticSignal(x, y, seed, density, irregularity) {
       const rx = dx * ca + dy * sa;
       const ry = -dx * sa + dy * ca;
       const radiusX = 0.28 + hash01(gx, gy, seed + 151) * 0.27;
-      const radiusY = radiusX * (0.60 + hash01(gx, gy, seed + 197) * 0.30);
-      const nx = rx / radiusX;
-      const ny = ry / radiusY;
+      // Une seule division au lieu de deux : `ry / radiusY` s'écrit
+      // `(ry / radiusX) / (0,60 + …)`, et le facteur de forme se factorise.
+      const invRx = 1 / radiusX;
+      const nx = rx * invRx;
+      const ny = (ry * invRx) / (0.60 + hash01(gx, gy, seed + 197) * 0.30);
       best = Math.max(best, 1 - Math.sqrt(nx * nx + ny * ny));
     }
   }
@@ -272,25 +281,89 @@ export function makeFieldContext(geometry) {
     basinScaleCm: basin,
 
     seed: g.seed | 0,
+
+    // ---- Invariants des trois familles ajoutées avec la boutique ------------
+    //
+    // `makeFieldContext` précalculait déjà les réciproques de la famille
+    // `organic` — c'est pourquoi sa branche ne contient AUCUNE division. Les
+    // trois familles suivantes ont été écrites sans reprendre la convention :
+    // elles divisaient en dur, jusqu'à sept fois par cellule pour Archipel, et
+    // recalculaient deux cent mille fois des quantités qui ne dépendent que de
+    // la géométrie — longueur d'onde, seuil, largeur d'épaulement, gains.
+    //
+    // Tout est remonté ici. Ce ne sont pas de nouveaux réglages : chaque ligne
+    // est l'expression littérale qui se trouvait dans la boucle.
+    familleId: FAMILY_ID[g.family || 'organic'] ?? FAMILY_ID.organic,
+    density: g.density,
+    irregularity: g.irregularity,
+    shoulder: g.shoulder,
+    invCarrierCutoff: 1 / CARRIER_CUTOFF,
+
+    // Dunes
+    invDuneLargeX: 1 / (basin * 1.55),
+    invDuneLargeY: 1 / (basin * 1.25),
+    invDuneCrossX: 1 / (basin * 0.72),
+    invDuneCrossY: 1 / (basin * 1.8),
+    dunePhaseK: (Math.PI * 2) / (basin * (0.92 + (1 - g.density) * 0.54)),
+    duneLargeGain: 1.7 + g.warpAmount * 2.4,
+    duneThreshold: 0.25 - g.density * 0.42,
+    duneShoulder: NOISE_STD * (0.12 + g.shoulder * 0.55) * 1.30,
+    duneCarve: CARVE_GAIN * 0.55,
+
+    // Cellules
+    invCellScale: 1 / basin,
+    cellJitter: 0.30 + g.irregularity * 0.62,
+    cellRadius: 0.24 + g.density * 0.33,
+    cellWidth: 0.035 + g.shoulder * 0.12,
+    cellCarve: CARVE_GAIN * 0.52,
+
+    // Archipel
+    invArchLargeX: 1 / (basin * 1.25),
+    invArchLargeY: 1 / (basin * 2.10),
+    invArchCrossX: 1 / (basin * 0.82),
+    invArchCrossY: 1 / (basin * 2.65),
+    archPhaseK: (Math.PI * 2) / (basin * 1.82),
+    archLargeGain: 2.8 + g.warpAmount * 2.4,
+    archShoulder: NOISE_STD * (0.12 + g.shoulder * 0.55) * 1.50,
+    archCarve: CARVE_GAIN * 0.50,
+    invArchIsland: 1 / (basin * 1.72),
+    archIslandKeep: 0.18 + g.density * 0.24,
+    archIslandJitter: 0.46 + g.irregularity * 0.40,
+    archIslandWidth: 0.10 + g.shoulder * 0.07,
+    archIslandCarve: CARVE_GAIN * 0.56,
   };
 }
+
+// Familles résolues en ENTIER une fois par reconstruction.
+//
+// La boucle comparait quatre chaînes par cellule — huit cent mille comparaisons
+// par reconstruction. V8 interne les littéraux, donc le coût réel est faible,
+// mais un entier le supprime tout à fait et rend le `switch` compilable.
+const FAMILY_ID = { organic: 0, dunes: 1, cells: 2, archipelago: 3 };
 
 /**
  * Évalue le relief en un point, en CENTIMÈTRES absolus.
  * `warpXCm`/`warpYCm` sont le déplacement sculpté, `liftValue` la hauteur sculptée.
- */
-/**
- * Décompose le relief en ses parties STATIQUE et VARIABLE.
  *
- * La hauteur s'écrit h = A·houle + B, où seule la houle dépend du temps :
- *   A = amplitude × extinction(creusement)   — statique
- *   B = −profondeur × creusement + sculpture — statique
- * Les coordonnées d'échantillonnage de la houle (sx, sy) sont statiques elles
- * aussi. C'est cette décomposition qui permet d'animer l'ondulation sans
- * réévaluer tout le champ : par image il ne reste que la houle, soit deux
- * évaluations de bruit au lieu d'une quinzaine.
+ * UNE SEULE FONCTION, ET UN SCALAIRE EN SORTIE.
+ *
+ * Il y en avait deux : `evalParts` rendait un objet `{ a, b, sx, sy, carrier,
+ * carve }` que `evalField` recombinait aussitôt. La décomposition servait à
+ * animer la houle sans réévaluer le champ — deux évaluations de bruit par image
+ * au lieu d'une quinzaine. Mais l'animation a été retirée du produit (« produit
+ * statique : aucune boucle d'animation », `atelier.js`), et l'unique appelant
+ * de `evalParts` jetait la moitié des champs.
+ *
+ * Restait le coût : DEUX CENT MILLE objets à six champs et à durée de vie nulle
+ * par reconstruction. L'échappement n'était pas éliminable par le moteur — la
+ * fonction fait cent dix lignes et onze appels à `fbm`, très au-dessus du budget
+ * d'inlining. Fusionner supprime l'allocation entière.
+ *
+ * Si l'animation revient, elle reviendra avec sa propre fonction : une
+ * décomposition qui coûte tous les jours pour une fonctionnalité qui n'existe
+ * plus n'est pas une provision, c'est une dette.
  */
-export function evalParts(ctx, xCm, yCm, warpXCm = 0, warpYCm = 0, liftValue = 0) {
+export function evalField(ctx, xCm, yCm, warpXCm = 0, warpYCm = 0, liftValue = 0) {
   const px = xCm + ctx.offsetX + warpXCm;
   const py = yCm + ctx.offsetY + warpYCm;
 
@@ -321,54 +394,59 @@ export function evalParts(ctx, xCm, yCm, warpXCm = 0, warpYCm = 0, liftValue = 0
   //    profil monotone et sculpture, mais pas le champ qui dessine leurs
   //    silhouettes : changer seulement les paramètres d’un même bruit faisait
   //    converger Dunes, Cellules et Archipel vers le même langage visuel.
-  const rim = ctx.rimJitter > 0 ? ctx.rimJitter * fbm(bx * ctx.invRim, by * ctx.invRim, ctx.seed + 3, 2) : 0;
+  //
+  // `rim` N'EST PLUS CALCULÉ QUE LÀ OÙ IL EST LU. Il l'était inconditionnellement,
+  // alors que ni Cellules ni Archipel ne le consultent — un `fbm` complet jeté
+  // sur deux familles sur trois, soit un sixième du budget de bruit en Cellules
+  // et un huitième en Archipel, et ce sur des préréglages dont l'irrégularité
+  // n'est jamais nulle (0,38 et 0,46).
+  const famille = ctx.familleId;
   let carve;
 
-  if (ctx.family === 'dunes') {
+  if (famille === 1) {
     // Strates continues : une phase périodique serpente sous deux bruits très
     // larges. Les lignes restent longues et lisibles ; le second terme varie
     // leur largeur sans les casser en taches indépendantes.
-    const large = fbm(ax / (ctx.basinScaleCm * 1.55), ay / (ctx.basinScaleCm * 1.25), ctx.seed + 811, 2);
-    const cross = fbm(ax / (ctx.basinScaleCm * 0.72), ay / (ctx.basinScaleCm * 1.8), ctx.seed + 907, 2);
-    const wavelength = ctx.basinScaleCm * (0.92 + (1 - ctx.geometry.density) * 0.54);
-    const phase = (by / wavelength) * Math.PI * 2 + large * (1.7 + ctx.geometry.warpAmount * 2.4) + cross * 0.62;
+    const rim = ctx.rimJitter > 0 ? ctx.rimJitter * fbm(bx * ctx.invRim, by * ctx.invRim, ctx.seed + 3, 2) : 0;
+    const large = fbm(ax * ctx.invDuneLargeX, ay * ctx.invDuneLargeY, ctx.seed + 811, 2);
+    const cross = fbm(ax * ctx.invDuneCrossX, ay * ctx.invDuneCrossY, ctx.seed + 907, 2);
+    const phase = by * ctx.dunePhaseK + large * ctx.duneLargeGain + cross * 0.62;
     const bands = Math.cos(phase) * 0.50 + large * 0.23 + cross * 0.09 + bias * 0.42 + rim * 0.28;
-    const threshold = 0.25 - ctx.geometry.density * 0.42;
-    carve = ctx.carveGain * 0.55 * shoulderRamp(bands - threshold, ctx.shoulderBasin * 1.30);
-  } else if (ctx.family === 'cells') {
+    carve = ctx.duneCarve * shoulderRamp(bands - ctx.duneThreshold, ctx.duneShoulder);
+  } else if (famille === 2) {
     const signal = cellularSignal(
-      bx / ctx.basinScaleCm,
-      by / ctx.basinScaleCm,
+      bx * ctx.invCellScale,
+      by * ctx.invCellScale,
       ctx.seed + 1201,
-      ctx.geometry.density,
-      ctx.geometry.irregularity,
+      ctx.cellJitter,
+      ctx.cellRadius,
       ctx.cellFusion
     );
-    const width = 0.035 + ctx.geometry.shoulder * 0.12;
-    carve = ctx.carveGain * 0.52 * shoulderRamp(signal + bias * 0.08, width);
-  } else if (ctx.family === 'archipelago') {
+    carve = ctx.cellCarve * shoulderRamp(signal + bias * 0.08, ctx.cellWidth);
+  } else if (famille === 3) {
     // Grandes strates ouvertes + quelques bassins. Les deux composantes sont
     // des champs de distance monotones ; leur union conserve des fonds propres
     // là où deux formes se rejoignent.
-    const large = fbm(ax / (ctx.basinScaleCm * 1.25), ay / (ctx.basinScaleCm * 2.10), ctx.seed + 1433, 2);
-    const cross = fbm(ax / (ctx.basinScaleCm * 0.82), ay / (ctx.basinScaleCm * 2.65), ctx.seed + 1499, 2);
-    const phase = (by / (ctx.basinScaleCm * 1.82)) * Math.PI * 2 + large * (2.8 + ctx.geometry.warpAmount * 2.4) + cross * 0.72;
+    const large = fbm(ax * ctx.invArchLargeX, ay * ctx.invArchLargeY, ctx.seed + 1433, 2);
+    const cross = fbm(ax * ctx.invArchCrossX, ay * ctx.invArchCrossY, ctx.seed + 1499, 2);
+    const phase = by * ctx.archPhaseK + large * ctx.archLargeGain + cross * 0.72;
     const bands = Math.cos(phase) * 0.49 + large * 0.28 + bias * 0.22;
-    const bandCarve = ctx.carveGain * 0.50 * shoulderRamp(bands - 0.14, ctx.shoulderBasin * 1.50);
+    const bandCarve = ctx.archCarve * shoulderRamp(bands - 0.14, ctx.archShoulder);
     const islands = sparseEllipticSignal(
-      bx / (ctx.basinScaleCm * 1.72),
-      by / (ctx.basinScaleCm * 1.72),
+      bx * ctx.invArchIsland,
+      by * ctx.invArchIsland,
       ctx.seed + 1601,
-      ctx.geometry.density,
-      ctx.geometry.irregularity
+      ctx.archIslandKeep,
+      ctx.archIslandJitter
     );
-    const islandCarve = ctx.carveGain * 0.56 * shoulderRamp(islands, 0.10 + ctx.geometry.shoulder * 0.07);
+    const islandCarve = ctx.archIslandCarve * shoulderRamp(islands, ctx.archIslandWidth);
     // `smax` et non `Math.max` : la jonction de deux formes est un point anguleux
     // du creusement, donc un minimum local — exactement la bosse enclavée que le
     // test A2 compte. L'union douce arrondit la jonction et la comble.
     carve = smax(bandCarve, islandCarve, ctx.fuseK);
   } else {
     // Silhouette bruitée — la famille `organic`, seule à posséder des chenaux.
+    const rim = ctx.rimJitter > 0 ? ctx.rimJitter * fbm(bx * ctx.invRim, by * ctx.invRim, ctx.seed + 3, 2) : 0;
     const nBasin = fbm(bx * ctx.invBasin, by * ctx.invBasin, ctx.seed + 1, ctx.octavesBasin);
     carve = ctx.carveGain * shoulderRamp(nBasin + bias + rim - ctx.thresholdBasin, ctx.shoulderBasin);
     if (ctx.channelWeight > 0) carve = smax(carve, channelCarve(ctx, bx, by, bias, rim), ctx.fuseK);
@@ -382,30 +460,21 @@ export function evalParts(ctx, xCm, yCm, warpXCm = 0, warpYCm = 0, liftValue = 0
   // Stricte monotonie : dh/dcarve = houle × extinction′ − profondeur, avec
   // |houle| ≤ SWELL_RATIO × profondeur et |extinction′| ≤ 1,5 / CARRIER_CUTOFF,
   // donc dh/dcarve ≤ (0,16 × 5 − 1) × profondeur = −0,20 × profondeur < 0.
-  const attenuation = 1 - smoothstep01(carve / CARRIER_CUTOFF);
-
   // Dunes et Archipel tirent déjà leur grande modulation de leur champ de
   // silhouettes. Leur réinjecter la houle comme HAUTEUR créait, sur certaines
   // variations, une petite bosse isolée au fond d'une vallée. Le bruit reste
   // utilisé en amont pour courber les formes, mais pas pour relever leur fond.
-  const carrierHeight = ctx.family === 'dunes' || ctx.family === 'archipelago' ? 0 : ctx.swellAmp * attenuation;
+  // L'extinction ne sert alors à rien : on ne la calcule pas.
+  const carrierHeight = famille === 1 || famille === 3
+    ? 0
+    : ctx.swellAmp * (1 - smoothstep01(carve * ctx.invCarrierCutoff));
 
-  return {
-    a: carrierHeight,
-    b: -ctx.depth * carve + liftValue,
-    sx,
-    sy,
-    carrier,
-    carve,
-  };
-}
-
-/**
- * Évalue le relief en un point, en CENTIMÈTRES absolus.
- * `warpXCm`/`warpYCm` sont le déplacement sculpté, `liftValue` la hauteur sculptée.
- */
-export function evalField(ctx, xCm, yCm, warpXCm = 0, warpYCm = 0, liftValue = 0) {
-  const parts = evalParts(ctx, xCm, yCm, warpXCm, warpYCm, liftValue);
-  const h = parts.a * parts.carrier + parts.b;
+  const h = carrierHeight * carrier + (liftValue - ctx.depth * carve);
+  // LE MODE NÉGATIF N'EST PAS ÉVALUÉ ICI PAR PARESSE.
+  //
+  // Il l'est parce que `heightmap.js` sait le retourner après coup, sur le
+  // tampon déjà construit : le flou et le champ d'occlusion étant linéaires,
+  // nier la hauteur revient à nier son flou. Basculer la case ne coûte donc plus
+  // une reconstruction complète. Voir `negateHeightmap`.
   return ctx.negative ? -h : h;
 }

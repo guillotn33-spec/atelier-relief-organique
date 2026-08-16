@@ -89,6 +89,39 @@ export class EffectPreviews {
     this.file = [];
     this.enCours = false;
     this.abandonne = false;
+
+    // ON NE REND QUE CE QUI PEUT ÊTRE VU.
+    //
+    // Les vingt-sept vignettes étaient calculées inconditionnellement au
+    // démarrage, dont les treize des catégories « Matières » et « Éclairage »,
+    // fermées au chargement. Plus de la moitié du travail — quelque 240 ms de
+    // thread principal — partait dans des pixels que l'utilisateur ne
+    // déplierait peut-être jamais.
+    //
+    // Un `<details>` fermé donne à ses enfants une boîte vide : l'observateur
+    // ne les signale qu'à l'ouverture, ce qui est exactement la règle voulue,
+    // sans avoir à écouter l'évènement `toggle` ni à connaître la mise en page.
+    this.observateur = typeof IntersectionObserver === 'function'
+      ? new IntersectionObserver((entrees) => {
+        for (const entree of entrees) {
+          if (!entree.isIntersecting) continue;
+          this.observateur.unobserve(entree.target);
+          const tache = this.enAttente.get(entree.target);
+          if (!tache) continue;
+          this.enAttente.delete(entree.target);
+          this.file.push(tache);
+        }
+        this.drainer();
+      }, { rootMargin: '160px' })
+      : null;
+    this.enAttente = new Map();
+  }
+
+  /** Met la vignette en file, ou attend qu'elle devienne visible. */
+  planifier(hote, tache) {
+    if (!this.observateur) { this.file.push(tache); return; }
+    this.enAttente.set(hote, tache);
+    this.observateur.observe(hote);
   }
 
   /**
@@ -102,6 +135,8 @@ export class EffectPreviews {
   destroy() {
     this.abandonne = true;
     this.file.length = 0;
+    this.enAttente.clear();
+    this.observateur?.disconnect();
     this.cache = null;
   }
 
@@ -147,7 +182,7 @@ export class EffectPreviews {
       }
       bouton.title = `${effet.name} — ${effet.description}`;
 
-      this.file.push({ cle, toile });
+      this.planifier(bouton, { cle, toile });
     }
 
     for (const carte of this.root.querySelectorAll('.preset-card[data-preset]')) {
@@ -157,7 +192,7 @@ export class EffectPreviews {
       const toile = this.toile(84, 53, 'preset-art preset-art-render');
       if (art) art.replaceWith(toile);
       else carte.prepend(toile);
-      this.file.push({ cle, toile });
+      this.planifier(carte, { cle, toile });
     }
 
     this.drainer();
